@@ -11,6 +11,7 @@
 - 设置里可以选候选回复条数（1 / 2 / 3 条，默认 3 条）；只要 1 条时不做排序，出得更快。
 - 判断接口新增「Vercel」预设。选中后自动填好地址 `https://ai-gateway.vercel.sh/typesafe` 和模型 `typesafe-ai/jev`，密钥用 Vercel AI Gateway 的 key。走的是网关的 TypeSafe 兼容接口 `POST /v1/systemone`，和 TypeSafe 直连同一套请求体与 `noul` 答案，默认仍是 OpenRouter。
 - 判断接口新增「OpenCode Zen」预设。选中后自动填好地址 `https://opencode.ai/zen` 和模型 `jev-1.13`，密钥用 [OpenCode Zen](https://opencode.ai/zen) 的 key。走的是 Zen 的 TypeSafe 兼容接口 `POST /v1/systemone`，同样一套请求体与 `noul` 答案；`jev-1.13` 输出免费（输入 $0.042/M，一次判断约 1000 输入 token，约 $0.00004），也可以手动改成限时免费的 `jev-1.13-free`（功能受限）。
+- 判断接口新增「Opper」预设。选中后自动填好地址 `https://api.opper.ai/v3/compat` 和模型 `typesafe/jev-latest`，密钥用 [Opper](https://opper.ai) 的 key。走的是 Opper 的 TypeSafe 兼容接口 `POST /v1/systemone`，同样一套请求体与 `noul` 答案，价格与 TypeSafe 相同（输入 $0.042/M，输出免费）。同一个地址也能用开源的 Kev 4B：把模型改成 `opper/kev-4b` 即可。
 
 **改进**
 - 只有对方发来新消息才重新分析。上下翻聊天记录不会清空卡片、不会重新分析，也不会弹来弹去；更新时旧结果先留着，标题旁显示已等待的秒数，新结果出来再替换，收起时只闪一下提示。
