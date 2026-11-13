@@ -13,7 +13,14 @@ import org.json.JSONObject
 /**
  * The Jev judgment route only: the 7 judgment questions in one call, and the
  * ranking question over already-drafted candidates. Reads judgeProvider /
- * judgeBaseUrl / judgeKey / judgeModel from [Prefs]; nothing generative here.
+ * judgeBaseUrl / judgeKey / judgeModel from [Prefs].
+ *
+ * 两种传输通向同一组 7 个答案：
+ * - **Jev 协议**（OpenRouter / Bocha / TypeSafe / Vercel / Zen / Opper / 自定义）：
+ *   一次 POST `{model, state, questions}`，答案按题 id 返回。
+ * - **OpenAI chat completions**（DeepSeek 官方）：题目渲染成 prompt 发出去，
+ *   回过来的 JSON 再映射回同样的 id（见 [JevQuestions.judgeSystemPrompt] 与
+ *   [JevQuestions.judgeUserPrompt]）。
  */
 class JudgeClient(private val prefs: Prefs) {
 
@@ -91,12 +98,49 @@ class JudgeClient(private val prefs: Prefs) {
 
     private fun send(state: JSONObject, questions: JSONObject): JSONObject {
         val url = prefs.judgeEndpoint()
+        // DeepSeek 官方说 chat/completions，不说 Jev 决策协议：把同样的题目渲染成
+        // prompt，再把它回过来的 JSON 映射回同样的 key，这样下游所有消费者
+        // （悬浮窗、设置页测试、知识库）都不用改。
+        if (prefs.judgeUsesChatCompletions()) {
+            return sendViaChatCompletions(url, state, questions)
+        }
         val body = JSONObject()
             .put("model", prefs.judgeModel)
             .put("state", state)
             .put("questions", questions)
         val resp = HttpJson.post(url, prefs.judgeKey, body, Route.JUDGE, HttpJson.headersFor(url))
         return resp.optJSONObject("answers") ?: JSONObject()
+    }
+
+    /**
+     * chat/completions 传输：一个 prompt 带上 state 与被问到的题目，回一个 JSON。
+     *
+     * 模型被要求只回答被问到的题（judge 与 rank 问的题集不同），也可能合法地只
+     * 回一个子集；[JevQuestions.mergeJudgeReply] 用安全默认值补空，而不是让残缺
+     * 答案变成一个满是 null 的分析结果。
+     */
+    private fun sendViaChatCompletions(
+        url: String,
+        state: JSONObject,
+        questions: JSONObject
+    ): JSONObject {
+        val asked = questions.keys().asSequence().toList()
+        val raw = DeepSeekDialect.complete(
+            url = url,
+            key = prefs.judgeKey,
+            model = prefs.judgeModel,
+            system = JevQuestions.judgeSystemPrompt(),
+            user = JevQuestions.judgeUserPrompt(state, questions),
+            temperature = 0.0,
+            route = Route.JUDGE,
+            jsonMode = true
+        )
+        val parsed = DeepSeekDialect.parseObject(raw)
+        if (parsed == null) {
+            Log.w(TAG, "judge reply was not JSON; treating as unparseable")
+            throw ApiException(Route.JUDGE, null, "返回内容不是合法 JSON：${raw.take(120)}")
+        }
+        return JevQuestions.mergeJudgeReply(parsed, asked)
     }
 
     private fun parseChoice(o: JSONObject?): Choice? {

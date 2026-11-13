@@ -76,9 +76,15 @@ open class ChatCaptureService : AccessibilityService() {
 
     /** Adapted chat apps, keyed by package name. Apps in [BLOCKED_PKGS] are
      *  never read at all (see [maybeCapture] / [onAccessibilityEvent]). */
-    private val adapters = listOf(QQAdapter(), XAdapter(), FeishuAdapter(), WhatsAppAdapter()).associateBy { it.pkg }
+    private val adapters = listOf(
+        QQAdapter(), XAdapter(), FeishuAdapter(), WhatsAppAdapter(),
+        WeChatAdapter(),
+        // Douyin and Duoshan share one codebase; only the package differs.
+        DouyinAdapter("com.ss.android.ugc.aweme"),
+        DouyinAdapter("my.maya.android")
+    ).associateBy { it.pkg }
 
-    /** 通用几何适配器：任何没写专门适配器的聊天软件都走它（微信 / Soul / 其它 IM）。 */
+    /** 通用几何适配器：任何没写专门适配器的聊天软件都走它（其它 IM）。 */
     private val genericAdapter = GenericAdapter()
 
     /** Submit to the worker, ignoring rejection after the service is torn down
@@ -924,7 +930,9 @@ open class ChatCaptureService : AccessibilityService() {
          *  screenshotted: no OCR fallback, no manual "截屏识别一次". */
         private val NO_SCREENSHOT_PKGS = setOf(WhatsAppRules.PACKAGE)
 
-        private val BLOCKED_PKGS = setOf("com.tencent.mm", "cn.soulapp.android")
+        /** Soul 屏蔽截屏，任何采集都读不到；微信自 v1.8 起有专用 [WeChatAdapter]，
+         *  不再拦截（其正文常被混淆，读空时由 OCR 兜底）。 */
+        private val BLOCKED_PKGS = setOf("cn.soulapp.android")
 
         /** Shown once per visit to a blocked app. Plain words, full-width
          *  punctuation; steers the user to a supported app. */

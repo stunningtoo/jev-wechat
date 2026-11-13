@@ -23,8 +23,10 @@ android {
         applicationId = "com.jev.probe"
         minSdk = 30
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.7"
+        // 12: PR #68 整合（微信 / 抖音 / 多闪适配器 + DeepSeek 官方三路）。
+        // 高于此前任何已发布构建，避免降级安装被系统拒绝。
+        versionCode = 12
+        versionName = "1.8"
 
         // ML Kit's bundled Chinese recognizer ships native libs for every ABI.
         // The target phone (and every phone this can run on: minSdk 30) is

@@ -246,10 +246,16 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
             PROVIDER_VERCEL -> "$base/v1/systemone"   // TypeSafe-compatible gateway
             PROVIDER_ZEN -> "$base/v1/systemone"      // TypeSafe-compatible gateway
             PROVIDER_OPPER -> "$base/v1/systemone"    // TypeSafe-compatible gateway
+            // DeepSeek 官方没有 /alpha/decisions 或 /v1/systemone；它走标准
+            // chat/completions，7 道题以 prompt 形式表达（见 DeepSeekDialect）。
+            PROVIDER_DEEPSEEK -> "$base/chat/completions"
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
             else -> "$base/alpha/decisions"
         }
     }
+
+    /** 判断路由是否走 OpenAI 兼容的 chat/completions（目前只有 DeepSeek 官方）。 */
+    fun judgeUsesChatCompletions(): Boolean = judgeProvider == PROVIDER_DEEPSEEK
 
     /** Full POST URL for the OpenAI-compatible chat completions call. */
     fun replyEndpoint(): String = "${replyBaseUrl.trim().trimEnd('/')}/chat/completions"
@@ -313,6 +319,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val PROVIDER_VERCEL = "vercel"
         const val PROVIDER_ZEN = "zen"
         const val PROVIDER_OPPER = "opper"
+        const val PROVIDER_DEEPSEEK = "deepseek"
         const val PROVIDER_CUSTOM = "custom"
 
         const val OCR_MLKIT = "mlkit"
@@ -340,6 +347,12 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         // the same body if typed into the model box.
         const val DEFAULT_JUDGE_BASE_OPPER = "https://api.opper.ai/v3/compat"
         const val DEFAULT_JUDGE_MODEL_OPPER = "typesafe/jev-latest"
+        // DeepSeek 官方（https://api.deepseek.com/v1）没有 Jev 的决策接口：
+        // 7 道题以 prompt 形式发给 chat/completions，再由 DeepSeekDialect /
+        // JudgeClient 把答案解析回来。`deepseek-flash` 是支持视觉的旗舰型号;
+        // `deepseek-v4-pro` 只出文本。
+        const val DEFAULT_JUDGE_BASE_DEEPSEEK = "https://api.deepseek.com/v1"
+        const val DEFAULT_JUDGE_MODEL_DEEPSEEK = "deepseek-flash"
 
         // Reply route presets (OpenAI-compatible chat completions).
         const val DEFAULT_REPLY_BASE = "https://openrouter.ai/api/v1"
@@ -353,6 +366,8 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val DEFAULT_VISION_BASE = "https://openrouter.ai/api/v1"
         const val DEFAULT_VISION_MODEL = "qwen/qwen2.5-vl-72b-instruct"
         const val DASHSCOPE_VISION_MODEL = "qwen-vl-max"
+        // DeepSeek 官方视觉：`deepseek-flash` 接受标准 `image_url` content part。
+        const val DEEPSEEK_VISION_MODEL = "deepseek-flash"
 
         const val DEFAULT_REL = "对方是我的伴侣；from=me 的是我发的，from=other 的是对方发的"
     }
