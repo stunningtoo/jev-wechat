@@ -14,7 +14,7 @@
 
 ### 🌐 Trang web chính thức: **[chatjevs.com](https://chatjevs.com)**
 
-[English](README.md) | [简体中文](README.zh-CN.md) | Tiếng Việt | [日本語](README.ja.md) | [Releases](https://github.com/jev-chat/jev-chat-jarvis/releases)
+[English](README.md) | [简体中文](README.zh-CN.md) | Tiếng Việt | [日本語](README.ja.md) | [Releases](https://github.com/stunningtoo/jev-wechat/releases)
 
 **[Tải về](#tải-về-và-cài-đặt) · [Sản phẩm](#sản-phẩm) · [Cách hoạt động](#cách-hoạt-động) · [Quyền riêng tư](#quyền-riêng-tư-và-rủi-ro) · [Cộng đồng](#nhóm-trao-đổi--thu-thập-yêu-cầu)**
 
@@ -89,7 +89,7 @@ Hai phiên bản Android nằm trong kho mã này; các nền tảng khác có k
 | | Bản quốc tế | Bản tiếng Trung |
 | :--- | :--- | :--- |
 | Phù hợp với | Trò chuyện bằng tiếng Anh trên WhatsApp | Trò chuyện bằng tiếng Trung trên QQ, Feishu, X và WhatsApp |
-| Tải về | [jev-whatsapp-v0.1.0-release.apk](https://github.com/jev-chat/jev-chat-jarvis/releases/download/global-v0.1.0/jev-whatsapp-v0.1.0-release.apk) | [jev-assistant-v1.7-release.apk](https://raw.githubusercontent.com/jev-chat/jev-chat-jarvis/main/cn/apk/jev-assistant-v1.7-release.apk) |
+| Tải về | [jev-whatsapp-v0.1.0-release.apk](https://github.com/jev-chat/jev-chat-jarvis/releases/download/global-v0.1.0/jev-whatsapp-v0.1.0-release.apk) | [jev-assistant-v1.8-release.apk](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8-release.apk) |
 | Hướng dẫn | [README bản quốc tế (tiếng Anh)](../global/README.md) | [Hướng dẫn bản tiếng Trung](../cn/README.vi.md) |
 
 Hai phiên bản có thể cài cùng lúc trên một điện thoại. Sau khi cài, mở ứng dụng và làm theo hướng dẫn để bật dịch vụ trợ năng và quyền hiển thị cửa sổ nổi. Bản quốc tế do [@smgonthebeat](https://github.com/smgonthebeat) phát triển.

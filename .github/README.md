@@ -14,7 +14,7 @@
 
 ### 🌐 Official website: **[chatjevs.com](https://chatjevs.com)**
 
-English | [简体中文](README.zh-CN.md) | [Tiếng Việt](README.vi.md) | [日本語](README.ja.md) | [Releases](https://github.com/jev-chat/jev-chat-jarvis/releases)
+English | [简体中文](README.zh-CN.md) | [Tiếng Việt](README.vi.md) | [日本語](README.ja.md) | [Releases](https://github.com/stunningtoo/jev-wechat/releases)
 
 **[Download](#download--installation) · [Products](#products) · [How It Works](#how-it-works) · [Privacy](#privacy-and-risk) · [Community](#community-and-feedback)**
 
@@ -89,7 +89,7 @@ Both Android editions live in this repository. The other platforms have their ow
 | | Global edition | Chinese edition |
 | :--- | :--- | :--- |
 | For | Chats in English on WhatsApp | Chats in Chinese on QQ, Feishu, X and WhatsApp |
-| Download | [jev-whatsapp-v0.1.0-release.apk](https://github.com/jev-chat/jev-chat-jarvis/releases/download/global-v0.1.0/jev-whatsapp-v0.1.0-release.apk) | [jev-assistant-v1.7-release.apk](https://raw.githubusercontent.com/jev-chat/jev-chat-jarvis/main/cn/apk/jev-assistant-v1.7-release.apk) |
+| Download | [jev-whatsapp-v0.1.0-release.apk](https://github.com/jev-chat/jev-chat-jarvis/releases/download/global-v0.1.0/jev-whatsapp-v0.1.0-release.apk) | [jev-assistant-v1.8-release.apk](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8-release.apk) |
 | Guide | [Global edition README](../global/README.md) | [Chinese edition README](../cn/README.en.md) |
 
 Both can be installed on the same phone. After installing, open the app and follow its guide to turn on the accessibility service and the overlay permission. The global edition is built by [@smgonthebeat](https://github.com/smgonthebeat).

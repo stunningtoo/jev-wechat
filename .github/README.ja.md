@@ -14,7 +14,7 @@
 
 ### 🌐 公式サイト：**[chatjevs.com](https://chatjevs.com)**
 
-[English](README.md) | [简体中文](README.zh-CN.md) | [Tiếng Việt](README.vi.md) | 日本語 | [Releases](https://github.com/jev-chat/jev-chat-jarvis/releases)
+[English](README.md) | [简体中文](README.zh-CN.md) | [Tiếng Việt](README.vi.md) | 日本語 | [Releases](https://github.com/stunningtoo/jev-wechat/releases)
 
 **[ダウンロード](#ダウンロードとインストール) · [製品](#製品) · [仕組み](#仕組み) · [プライバシー](#プライバシーとリスク) · [コミュニティ](#コミュニティとフィードバック)**
 
@@ -89,7 +89,7 @@ Android の 2 つのエディションは、どちらもこのリポジトリに
 | | グローバル版 | 中国語版 |
 | :--- | :--- | :--- |
 | 対象 | WhatsApp での英語のチャット | QQ、Feishu、X、WhatsApp での中国語のチャット |
-| ダウンロード | [jev-whatsapp-v0.1.0-release.apk](https://github.com/jev-chat/jev-chat-jarvis/releases/download/global-v0.1.0/jev-whatsapp-v0.1.0-release.apk) | [jev-assistant-v1.7-release.apk](https://raw.githubusercontent.com/jev-chat/jev-chat-jarvis/main/cn/apk/jev-assistant-v1.7-release.apk) |
+| ダウンロード | [jev-whatsapp-v0.1.0-release.apk](https://github.com/jev-chat/jev-chat-jarvis/releases/download/global-v0.1.0/jev-whatsapp-v0.1.0-release.apk) | [jev-assistant-v1.8-release.apk](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8-release.apk) |
 | ガイド | [グローバル版の README](../global/README.md) | [中国語版の README](../cn/README.en.md) |
 
 両方を同じスマートフォンにインストールできます。インストール後、アプリを開き、ガイドに従ってユーザー補助サービスとオーバーレイの権限を有効にしてください。グローバル版は [@smgonthebeat](https://github.com/smgonthebeat) が開発しています。
