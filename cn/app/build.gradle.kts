@@ -71,10 +71,24 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests {
+            // android.jar is a stub on the JVM test classpath: every method throws
+            // "not mocked". The chat-completions code logs through android.util.Log
+            // on its unhappy paths, so let those calls return defaults instead.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // A real org.json on the JVM test classpath. android.jar only carries a stub
+    // whose methods throw "not mocked", so any unit test that builds or parses a
+    // JSON body (the chat-completions judgment tests do) fails for a reason that
+    // has nothing to do with the code under test.
+    testImplementation("org.json:json:20240303")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
