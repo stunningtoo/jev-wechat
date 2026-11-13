@@ -141,13 +141,26 @@ class ScreenCapture(
                     node.window?.getBoundsInScreen(r)
                     r
                 }.getOrNull()?.takeIf { it.width() > 0 && it.height() > 0 }
-                try {
-                    service.takeScreenshotOfWindow(windowId, exec, cb)
-                    main.postDelayed(timeout, TIMEOUT_MS)
-                    return
-                } catch (e: Throwable) {
-                    windowBounds = null
-                    Log.w(TAG, "takeScreenshotOfWindow unavailable: ${e.javaClass.simpleName}")
+                // The window shot is only usable WITH the window's screen rect:
+                // that rect is what turns the shot's pixels back into screen
+                // coordinates (see toBitmap). When getBoundsInScreen failed or
+                // came back empty, taking the window shot anyway left
+                // [toBitmap] sizing a window-sized bitmap with the display
+                // metrics — origin off by the status bar and every coordinates
+                // scale wrong by window/display height, which lands the OCR
+                // crops on the wrong lines. Fall through to the display shot
+                // instead, which needs no rect.
+                if (windowBounds != null) {
+                    try {
+                        service.takeScreenshotOfWindow(windowId, exec, cb)
+                        main.postDelayed(timeout, TIMEOUT_MS)
+                        return
+                    } catch (e: Throwable) {
+                        windowBounds = null
+                        Log.w(TAG, "takeScreenshotOfWindow unavailable: ${e.javaClass.simpleName}")
+                    }
+                } else {
+                    Log.w(TAG, "window bounds unavailable; using the display shot")
                 }
             }
         }

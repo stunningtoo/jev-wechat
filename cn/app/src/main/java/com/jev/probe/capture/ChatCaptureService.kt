@@ -239,6 +239,10 @@ open class ChatCaptureService : AccessibilityService() {
      *  See [ocrSignature]: this is the brake on the OCR path. */
     private var lastOcrSignature: String = ""
 
+    /** When the last automatic shot fired, for apps whose tree carries no bubble
+     *  rectangles. See the `rects.isEmpty()` branch in [maybeCapture]. */
+    private var lastOcrAt = 0L
+
     /** Whether the "not supported" notice has been shown for the current visit
      *  to a blocked app. Reset whenever another foreground is seen, so it
      *  re-appears next visit but does not re-pop on every event. */
@@ -389,10 +393,27 @@ open class ChatCaptureService : AccessibilityService() {
                 // second forever. The picture can only differ if the bubbles moved
                 // or the conversation changed, and that is exactly what the
                 // signature measures.
-                val sig = ocrSignature(pkg ?: "", snapshot.title, snapshot.bubbleRects)
-                if (sig == lastOcrSignature && overlay?.isShowing() == true) return
                 if (ocrBusy) return
-                lastOcrSignature = sig
+                if (snapshot.bubbleRects.isEmpty()) {
+                    // No rectangles means [ocrSignature] collapses to "package|title"
+                    // — constant for the whole visit. Using it here made the OCR
+                    // path fire exactly once per conversation: every later message
+                    // returned on the line below and the card never updated. That
+                    // is precisely the apps this fallback exists for (WeChat hides
+                    // its message bodies from the a11y tree since 8.0.52, and the
+                    // geometric adapter reports no rects), so they were stuck on
+                    // their first screen. A time window instead: still cheap, and
+                    // [ScreenCapture]'s own >=1s throttle plus the failure backoff
+                    // keep a pathological redraw from turning into a shot storm.
+                    val now = SystemClock.elapsedRealtime()
+                    if (overlay?.isShowing() == true && now - lastOcrAt < OCR_RETRY_MS) return
+                    lastOcrAt = now
+                    lastOcrSignature = ""
+                } else {
+                    val sig = ocrSignature(pkg ?: "", snapshot.title, snapshot.bubbleRects)
+                    if (sig == lastOcrSignature && overlay?.isShowing() == true) return
+                    lastOcrSignature = sig
+                }
                 ocrCapture(snapshot.title, snapshot.bubbleRects, pkg ?: "", manual = false)
             }
             return
@@ -821,6 +842,14 @@ open class ChatCaptureService : AccessibilityService() {
         val input = when (token.target.pkg) {
             "com.tencent.mobileqq" -> root.findAccessibilityNodeInfosByViewId("com.tencent.mobileqq:id/input").firstOrNull()
             "com.ss.android.lark" -> root.findAccessibilityNodeInfosByViewId("com.ss.android.lark:id/kb_rich_text_content").firstOrNull()
+            // Douyin / Duoshan: both expose the send box as `msg_et`
+            // (verified on device 2026-09-27). The same suffix the adapter parses.
+            "com.ss.android.ugc.aweme" -> root.findAccessibilityNodeInfosByViewId("com.ss.android.ugc.aweme:id/msg_et").firstOrNull()
+            "my.maya.android" -> root.findAccessibilityNodeInfosByViewId("my.maya.android:id/msg_et").firstOrNull()
+            // WeChat has no stable id we have verified; the generic probe accepts
+            // it only when the tree holds exactly one editable field, so a stray
+            // search box can never swallow the draft.
+            "com.tencent.mm" -> findEditable(root)
             "com.twitter.android" -> findEditable(root)
             else -> null // Unknown apps support explicit clipboard copy, not unverified writes.
         }
@@ -905,7 +934,11 @@ open class ChatCaptureService : AccessibilityService() {
         overlay?.onOcrCapture = null
         overlay?.hide()
         overlay = null
+        // Both pools outlive the service otherwise: the pool threads are daemons
+        // and only die with the process, so a service the system rebuilds a few
+        // times over a session accumulates one cached pool per instance.
         worker.shutdownNow()
+        analysisPool.shutdownNow()
     }
 
     companion object {
@@ -946,6 +979,12 @@ open class ChatCaptureService : AccessibilityService() {
         /** Whole-screen OCR keeps the middle: no action bar, no input area. */
         private const val TOP_CROP = 0.12f
         private const val BOTTOM_CROP = 0.84f
+
+        /** Minimum spacing between automatic shots when the tree gives us no
+         *  bubble rectangles and [ocrSignature] therefore cannot tell one screen
+         *  from the next. Kept above [ScreenCapture]'s own 1s throttle so this is
+         *  the effective rate, not a no-op. */
+        private const val OCR_RETRY_MS = 2500L
 
         /** Said on the panel whenever a snapshot came from flat-screen OCR. */
         private const val OCR_NOTE = "OCR 未分边，把全部消息当作对方所说"

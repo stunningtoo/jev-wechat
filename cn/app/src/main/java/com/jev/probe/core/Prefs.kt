@@ -37,6 +37,9 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         } else {
             Log.i(TAG, "prefs migrated judgeKey.len=${current.length} (no legacy key to copy)")
         }
+        // Drop the pre-1.3 slot either way. Leaving it behind kept a SECOND plain
+        // copy of the same API key in the prefs file for the life of the install.
+        if (legacy.isNotBlank()) e.remove(K_LEGACY_KEY)
         e.apply()
     }
 
@@ -237,28 +240,49 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
     /** Vision route key, falling back to reply then judge. */
     fun effectiveVisionKey(): String = visionKey.ifBlank { effectiveReplyKey() }
 
-    /** Full POST URL for the Jev decisions call, per provider. */
+    /** Full POST URL for the Jev decisions call, per provider.
+     *
+     *  The settings screen shows presets as their full endpoint (`expandJudgeUrl`),
+     *  so a user who copies that URL back into the box — or pastes one out of the
+     *  docs — lands a base that ALREADY ends in the path. Appending it again gave
+     *  `.../chat/completions/chat/completions` and a guaranteed 404, so a path the
+     *  base already carries is left alone. */
     fun judgeEndpoint(): String {
         val base = judgeBaseUrl.trim().trimEnd('/')
+        fun withPath(path: String) =
+            if (base.endsWith(path, ignoreCase = true)) base else base + path
         return when (judgeProvider) {
-            PROVIDER_BOCHA -> "$base/v1/systemone"    // same path as TypeSafe
-            PROVIDER_TYPESAFE -> "$base/v1/systemone"
-            PROVIDER_VERCEL -> "$base/v1/systemone"   // TypeSafe-compatible gateway
-            PROVIDER_ZEN -> "$base/v1/systemone"      // TypeSafe-compatible gateway
-            PROVIDER_OPPER -> "$base/v1/systemone"    // TypeSafe-compatible gateway
+            PROVIDER_BOCHA -> withPath("/v1/systemone")    // same path as TypeSafe
+            PROVIDER_TYPESAFE -> withPath("/v1/systemone")
+            PROVIDER_VERCEL -> withPath("/v1/systemone")   // TypeSafe-compatible gateway
+            PROVIDER_ZEN -> withPath("/v1/systemone")      // TypeSafe-compatible gateway
+            PROVIDER_OPPER -> withPath("/v1/systemone")    // TypeSafe-compatible gateway
             // DeepSeek 官方没有 /alpha/decisions 或 /v1/systemone；它走标准
             // chat/completions，7 道题以 prompt 形式表达（见 DeepSeekDialect）。
-            PROVIDER_DEEPSEEK -> "$base/chat/completions"
+            PROVIDER_DEEPSEEK -> withPath("/chat/completions")
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
-            else -> "$base/alpha/decisions"
+            else -> withPath("/alpha/decisions")
         }
     }
 
-    /** 判断路由是否走 OpenAI 兼容的 chat/completions（目前只有 DeepSeek 官方）。 */
-    fun judgeUsesChatCompletions(): Boolean = judgeProvider == PROVIDER_DEEPSEEK
+    /** 判断路由是否走 OpenAI 兼容的 chat/completions。
+     *
+     *  不只是 DeepSeek 预设：用户在「自定义」档里填的若是 DeepSeek 的
+     *  `.../chat/completions`（设置页的 expandJudgeUrl 就会这样展开），body 也必须
+     *  换成 chat 形状，否则 `{model,state,questions}` 过去必然 400。 */
+    fun judgeUsesChatCompletions(): Boolean =
+        judgeProvider == PROVIDER_DEEPSEEK ||
+            (judgeProvider == PROVIDER_CUSTOM &&
+                judgeBaseUrl.contains("/chat/completions", ignoreCase = true))
 
-    /** Full POST URL for the OpenAI-compatible chat completions call. */
-    fun replyEndpoint(): String = "${replyBaseUrl.trim().trimEnd('/')}/chat/completions"
+    /** Full POST URL for the OpenAI-compatible chat completions call.
+     *  Blank falls back to the OpenRouter default, like [visionEndpoint]: the
+     *  base is editable and clearing it used to leave the literal "/chat/
+     *  completions" as the whole URL, which fails as a relative-path request. */
+    fun replyEndpoint(): String {
+        val base = replyBaseUrl.trim().ifBlank { DEFAULT_REPLY_BASE }
+        return "${base.trimEnd('/')}/chat/completions"
+    }
 
     /** Same shape as [replyEndpoint]; blank falls back to the OpenRouter default. */
     fun visionEndpoint(): String {

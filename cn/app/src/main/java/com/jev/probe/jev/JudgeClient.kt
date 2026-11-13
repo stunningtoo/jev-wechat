@@ -109,7 +109,12 @@ class JudgeClient(private val prefs: Prefs) {
             .put("state", state)
             .put("questions", questions)
         val resp = HttpJson.post(url, prefs.judgeKey, body, Route.JUDGE, HttpJson.headersFor(url))
-        return resp.optJSONObject("answers") ?: JSONObject()
+        // `answers` is the whole point of the decision protocol: an empty object
+        // here used to be handed downstream, where every question falls back to
+        // its default and the user gets a confident-looking "平静 / 不紧张" card
+        // out of a 200 that answered nothing. A protocol violation is an error.
+        return resp.optJSONObject("answers")
+            ?: throw ApiException(Route.JUDGE, null, "返回缺少 answers 字段：${resp.toString().take(120)}")
     }
 
     /**

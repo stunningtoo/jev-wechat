@@ -150,9 +150,12 @@ class ReplyClient(private val prefs: Prefs) {
                 if (value is JSONArray) collect(value, n)?.let { return it }
             }
         }
-        // Fallback: split lines, stripping common list markers.
+        // Fallback: split lines, stripping common list markers. Only a marker
+        // WITH its separator is dropped — `trimStart('-','*','1','2','3','.')`
+        // treated those characters as a set and ate real leading text, turning
+        // "3个月后再说" into "个月后再说" and "1 小时后到" into " 小时后到".
         val lines = content.split("\n")
-            .map { it.trim().trimStart('-', '*', '1', '2', '3', '.', ' ', '"', '[', '{').trimEnd('"', ',', ']', '}') }
+            .map { it.trim().replace(LIST_MARKER, "").trimEnd('"', ',', ']', '}') }
             .filter { it.isNotBlank() }
             .distinct()
         if (lines.isNotEmpty()) return lines.take(n)
@@ -177,5 +180,10 @@ class ReplyClient(private val prefs: Prefs) {
 
         /** The field the draft prompt asks the model to put the array under. */
         private const val REPLIES_KEY = "replies"
+
+        /** A leading list marker **including** its separator: `- `, `* `, `• `,
+         *  `1. `, `2) `. The separator is what distinguishes a marker from a
+         *  reply that happens to start with a digit or a dash. */
+        private val LIST_MARKER = Regex("""^\s*(?:[-*•]\s+|\d{1,2}[.)]\s+)""")
     }
 }

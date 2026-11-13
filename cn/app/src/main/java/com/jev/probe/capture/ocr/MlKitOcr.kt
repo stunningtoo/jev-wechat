@@ -74,8 +74,12 @@ class MlKitOcr : OcrEngine {
                 main.post { cb(emptyList()) }; return@execute
             }
 
+            // Both listeners run on our own worker, not on the main thread: the
+            // default is TaskExecutors.MAIN_THREAD, which put the whole
+            // block/line walk, the Rect maths and the sort on the UI thread for
+            // every screenshot — the "jev-ocr" pool below only ever did the crop.
             client.process(image)
-                .addOnSuccessListener { text ->
+                .addOnSuccessListener(EXEC) { text ->
                     val lines = ArrayList<OcrLine>()
                     for (block in text.textBlocks) {
                         for (line in block.lines) {
@@ -93,7 +97,7 @@ class MlKitOcr : OcrEngine {
                     if (cropped) src.recycle()
                     main.post { cb(lines) }
                 }
-                .addOnFailureListener { e ->
+                .addOnFailureListener(EXEC) { e ->
                     Log.w(TAG, "ocr failed: ${e.javaClass.simpleName}")
                     if (cropped) src.recycle()
                     main.post { cb(emptyList()) }

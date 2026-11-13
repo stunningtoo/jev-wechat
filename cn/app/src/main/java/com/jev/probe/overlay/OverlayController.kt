@@ -87,6 +87,9 @@ class OverlayController(private val ctx: Context) {
     private var judgeWaiting = false
     private var repliesWaiting = false
     private var waitStart = 0L
+
+    /** Pending end-of-flash repaint; see [flashIfCollapsed]. */
+    private var flashReset: Runnable? = null
     private var lastFill: ((String) -> Unit)? = null
     private var ctxNotes = 0
     private var ctxHistory = 0
@@ -155,7 +158,12 @@ class OverlayController(private val ctx: Context) {
         if (m == Mode.BUBBLE) {
             r.addView(buildBubble())
             params.x = if (prefs.bubbleX in 0..(screenW - dp(52))) prefs.bubbleX else dp(8)
-            params.y = if (prefs.bubbleY >= 0) prefs.bubbleY else dp(150)
+            // Clamp on read, not just on drag: the stored y was legal for the
+            // ORIENTATION it was dropped in. Rotate a phone that had the bubble
+            // near the bottom, or unfold a foldable, and 2400 stays 2400 while
+            // the screen is now 1200 tall — the bubble sits entirely off-screen
+            // with no way back short of clearing app data.
+            params.y = prefs.bubbleY.coerceIn(dp(24), maxOf(dp(24), screenH - dp(72)))
         } else {
             r.addView(buildCard())
             placeCard(params)
@@ -172,6 +180,8 @@ class OverlayController(private val ctx: Context) {
     private fun clearCardRefs() {
         cardView = null; riskPill = null; headText = null; statusText = null; chevron = null
         bodyScroll = null; body = null; expanded = false; waitLabels.clear()
+        flashReset?.let { main.removeCallbacks(it) }
+        flashReset = null
     }
 
     // ---------------------------------------------------------------- bubble
@@ -235,14 +245,15 @@ class OverlayController(private val ctx: Context) {
     private fun setExpanded(v: Boolean) {
         val s = bodyScroll ?: return
         expanded = v
-        if (v) {
-            val y = lp?.y ?: dp(92)
-            s.maxH = minOf((screenH * 0.5f).roundToInt(), screenH - y - dp(140)).coerceAtLeast(dp(180))
-        }
+        if (v) s.maxH = expandedMaxH(lp?.y ?: dp(92))
         s.visibility = if (v) View.VISIBLE else View.GONE
         render()
         updateLayout()
     }
+
+    /** How tall the body may get so the card still ends above the screen edge. */
+    private fun expandedMaxH(y: Int): Int =
+        minOf((screenH * 0.5f).roundToInt(), screenH - y - dp(140)).coerceAtLeast(dp(180))
 
     // ---------------------------------------------------------------- gestures
 
@@ -266,6 +277,16 @@ class OverlayController(private val ctx: Context) {
                         // Keep clear of the side edges: the extreme edge is MIUI's back-gesture zone.
                         p.x = (startX + dx).coerceIn(dp(4), maxOf(dp(4), screenW - widthPx() - dp(4)))
                         p.y = (startY + dy).coerceIn(dp(24), screenH - dp(120))
+                        // maxH was computed once when the card expanded. Dragging
+                        // it down afterwards left the height stale, so the footer
+                        // ("换一组" / retry) ended up below the screen edge with no
+                        // way to scroll to it. Recompute from the live y. No
+                        // render() here: rebuilding children mid-drag breaks the
+                        // gesture.
+                        if (expanded) bodyScroll?.let {
+                            it.maxH = expandedMaxH(p.y)
+                            it.requestLayout()
+                        }
                         updateLayout()
                     }
                     true
@@ -451,7 +472,14 @@ class OverlayController(private val ctx: Context) {
         val c = cardView ?: return
         if (expanded) return
         c.background = card(16, panelBg(), stroke = true, strokeColor = Color.parseColor("#3A7AFE"), strokeW = 2)
-        main.postDelayed({ cardView?.background = card(16, panelBg(), stroke = true) }, 900)
+        // Tracked, so hide()/clearCardRefs() can cancel it. Left untracked it fired
+        // up to 900ms later against whatever cardView held by then — a hide() and
+        // a fresh showIdle()/beginRound() in that window had the previous round's
+        // timer repaint the NEW card, dropping the blue flash it had just set.
+        flashReset?.let { main.removeCallbacks(it) }
+        val reset = Runnable { cardView?.background = card(16, panelBg(), stroke = true) }
+        flashReset = reset
+        main.postDelayed(reset, 900)
     }
 
     // --------------------------------------------------------------- rendering
@@ -464,11 +492,13 @@ class OverlayController(private val ctx: Context) {
     private fun renderHeader() {
         val pill = riskPill ?: return
         val a = judgment
-        val lvl = a?.dangerLevel?.score?.roundToInt()
+        val score = a?.dangerLevel
+        val lvl = score?.score?.roundToInt()
         when {
             lvl != null -> {
-                pill.text = "${dangerWord(lvl)} $lvl/${a.dangerLevel!!.maxLevel}"
-                pill.setTextColor(Color.WHITE); pill.background = card(10, dangerColor(lvl))
+                val max = score.maxLevel
+                pill.text = "${dangerWord(lvl, max)} $lvl/$max"
+                pill.setTextColor(Color.WHITE); pill.background = card(10, dangerColor(lvl, max))
             }
             errorMsg != null -> { pill.text = "出错"; pill.setTextColor(Color.WHITE); pill.background = card(10, Color.parseColor("#DC2626")) }
             else -> { pill.text = "Jev"; pill.setTextColor(Color.WHITE); pill.background = card(10, Color.parseColor("#3A7AFE")) }
@@ -482,6 +512,13 @@ class OverlayController(private val ctx: Context) {
         }
         val waiting = judgeWaiting || repliesWaiting
         statusText?.visibility = if (waiting || (a != null && errorMsg != null)) View.VISIBLE else View.GONE
+        // The ticker's first refresh is a second away, so without this a round
+        // that just started kept the PREVIOUS round's text ("更新失败", "12s") on
+        // screen for that second. Seed it from the same clock the ticker uses.
+        if (waiting) statusText?.text =
+            (((SystemClock.elapsedRealtime() - waitStart) / 1000).toInt()).let {
+                if (judgment == null && judgeWaiting) "${it}s" else "更新中 ${it}s"
+            }
         if (!waiting && a != null && errorMsg != null) statusText?.text = "更新失败"
         val hasContent = a != null || !replies.isNullOrEmpty()
         chevron?.visibility = if (hasContent) View.VISIBLE else View.GONE
@@ -612,16 +649,28 @@ class OverlayController(private val ctx: Context) {
         toast("已复制")
     }
 
-    private fun dangerColor(lvl: Int): Int = when {
-        lvl >= 6 -> Color.parseColor("#DC2626")
-        lvl >= 3 -> Color.parseColor("#D97706")
+    /**
+     * Colour for a danger score on the model's OWN scale.
+     *
+     * The pill prints `lvl/maxLevel`, so the model tells us the scale every time
+     * — but these thresholds were hard-coded for a 0..10 scale. A model that
+     * answers on 0..5 could never reach "偏危险" (6 is off its scale) and one on
+     * 0..100 was always red. [maxLevel] <= 0 means the scale is unknown, and an
+     * unknown scale gets the neutral colour rather than a confident wrong one.
+     */
+    private fun dangerColor(lvl: Int, maxLevel: Int): Int = when {
+        maxLevel <= 0 -> Color.parseColor("#6B7280")
+        lvl * 10 >= maxLevel * 6L -> Color.parseColor("#DC2626")
+        lvl * 10 >= maxLevel * 3L -> Color.parseColor("#D97706")
         else -> Color.parseColor("#16A34A")
     }
 
-    private fun dangerWord(lvl: Int): String = when {
-        lvl >= 8 -> "很危险"
-        lvl >= 6 -> "偏危险"
-        lvl >= 3 -> "留神"
+    /** Wording for [lvl] on the model's own 0..[maxLevel] scale. */
+    private fun dangerWord(lvl: Int, maxLevel: Int): String = when {
+        maxLevel <= 0 -> "未知"
+        lvl * 10 >= maxLevel * 8L -> "很危险"
+        lvl * 10 >= maxLevel * 6L -> "偏危险"
+        lvl * 10 >= maxLevel * 3L -> "留神"
         else -> "安全"
     }
 

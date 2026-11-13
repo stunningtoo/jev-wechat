@@ -5,6 +5,8 @@ import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
+import java.text.Normalizer
 
 /** Note / contact / history counts, for the settings screen. */
 data class KbCounts(val notes: Int, val contacts: Int, val logLines: Int)
@@ -88,11 +90,16 @@ class KbStore private constructor(context: Context) {
             ok = writeAtomic(contactsFile, contactsJson(list))
             if (!ok) contactsCache = null
         }
+        // Only drop the history once the contact list no longer references it.
+        // A failed contacts write used to leave the contact in place but delete
+        // its logs anyway: the contact came back on the next load, with all of
+        // its history gone.
+        if (!ok) return@synchronized false
         logCache.remove(id)
         lastScreenCache.remove(id)
         runCatching { logFile(id).delete() }
         runCatching { screenFile(id).delete() }
-        ok
+        true
     }
 
     /**
@@ -118,20 +125,24 @@ class KbStore private constructor(context: Context) {
     /**
      * Create a contact from a conversation title, or fold the title/app into the
      * one that already matches. Returns a message for the toast.
+     *
+     * Held under [lock] for the whole read-modify-write: the capture worker and
+     * the analysis thread both call this, and the unlocked version let two
+     * callers see "no such contact" and create two.
      */
-    fun saveOrMergeContact(title: String, app: String): String {
+    fun saveOrMergeContact(title: String, app: String): String = synchronized(lock) {
         val display = displayName(title)
         if (display.isEmpty()) return "当前会话没有标题，存不了"
         val existing = findContact(title, app)
         if (existing == null) {
             val aliases = if (displayName(title) != title.trim()) listOf(title.trim()) else emptyList()
-            saveContact(Contact(
+            val ok = saveContact(Contact(
                 id = newId(),
                 name = display,
                 aliases = aliases,
                 apps = if (app.isBlank()) emptyList() else listOf(app)
             ))
-            return "已存为联系人「${display}」"
+            return if (ok) "已存为联系人「$display」" else WRITE_FAILED
         }
         val apps = if (app.isBlank() || existing.apps.contains(app)) existing.apps else existing.apps + app
         val raw = title.trim()
@@ -140,8 +151,8 @@ class KbStore private constructor(context: Context) {
             existing.aliases + raw else existing.aliases
         if (apps == existing.apps && aliases == existing.aliases)
             return "联系人「${existing.name}」已存在"
-        saveContact(existing.copy(apps = apps, aliases = aliases))
-        return "已并入联系人「${existing.name}」"
+        val ok = saveContact(existing.copy(apps = apps, aliases = aliases))
+        if (ok) "已并入联系人「${existing.name}」" else WRITE_FAILED
     }
 
     // ---------------------------------------------------------------- history
@@ -198,9 +209,14 @@ class KbStore private constructor(context: Context) {
                 list.isEmpty() -> screen
                 k > 0 -> screen.drop(k)
                 // Nothing in common with the screen we last wrote → we are looking
-                // at older messages, not newer ones. Leave the log alone.
+                // at older messages, not newer ones. Leave the log alone, but DO
+                // record this screen as the new reference: otherwise prev stays
+                // pinned to a screen the user has scrolled away from and every
+                // later capture keeps failing the same overlap test, so the log
+                // stops growing for that contact for as long as the session lasts.
                 prev.isNotEmpty() && keys.none { it in prev } -> {
                     Log.d(TAG, "appendLog contact=$contactId skipped: scrolled off the last screen")
+                    saveLastScreen(contactId, keys)
                     return true
                 }
                 else -> screen
@@ -271,7 +287,13 @@ class KbStore private constructor(context: Context) {
     fun counts(): KbCounts = synchronized(lock) {
         val contacts = loadContacts()
         var lines = 0
-        contacts.forEach { lines += loadLog(it.id).size }
+        // Read the length straight off the file instead of through [loadLog]:
+        // loadLog CACHES what it reads, so asking for a count pinned every
+        // contact's whole history (up to MAX_LOG each) in memory for the rest of
+        // the process — the settings screen and the self-check both call this.
+        contacts.forEach { c ->
+            lines += (logCache[c.id]?.size ?: readJsonArray(logFile(c.id)).arr?.length() ?: 0)
+        }
         KbCounts(loadNotes().size, contacts.size, lines)
     }
 
@@ -428,12 +450,16 @@ class KbStore private constructor(context: Context) {
     }
 
     /**
-     * Temp file + rename, so a crash never leaves a half-written document.
+     * Temp file + fsync + rename, so a crash never leaves a half-written
+     * document.
      *
      * The rename REPLACES the destination in one step (POSIX semantics, same
      * directory) — deleting the old file first would mean a kill in between
-     * loses everything. Returns false when the data did not reach disk; callers
-     * drop their cache so the next read goes back to the file.
+     * loses everything. The `fd.sync()` before the rename is what makes that
+     * true across a power cut: without it the rename can be committed while the
+     * temp file's data is still in the page cache, and the destination comes
+     * back as a zero-length file. Returns false when the data did not reach
+     * disk; callers drop their cache so the next read goes back to the file.
      */
     private fun writeAtomic(f: File, text: String): Boolean {
         if (f.absolutePath in unreadable) {
@@ -443,12 +469,20 @@ class KbStore private constructor(context: Context) {
         val tmp = File(f.parentFile, f.name + ".tmp")
         return try {
             f.parentFile?.mkdirs()
-            tmp.writeText(text, Charsets.UTF_8)
+            FileOutputStream(tmp).use { out ->
+                out.write(text.toByteArray(Charsets.UTF_8))
+                out.flush()
+                out.fd.sync()
+            }
             if (tmp.renameTo(f)) return true
             // Same-directory rename should not fail. If it somehow does, an
             // in-place overwrite is the only way left — not atomic, so say so.
             Log.w(TAG, "rename failed, overwriting ${f.name} in place")
-            f.writeText(text, Charsets.UTF_8)
+            FileOutputStream(f).use { out ->
+                out.write(text.toByteArray(Charsets.UTF_8))
+                out.flush()
+                out.fd.sync()
+            }
             runCatching { tmp.delete() }
             true
         } catch (e: Exception) {
@@ -473,6 +507,9 @@ class KbStore private constructor(context: Context) {
     companion object {
         private const val TAG = "JEVASSIST"
         const val MAX_LOG = 300
+
+        /** Toast text when the knowledge directory refuses a write. */
+        const val WRITE_FAILED = "保存失败：知识库目录不可写"
 
         @Volatile private var instance: KbStore? = null
 
@@ -504,9 +541,14 @@ class KbStore private constructor(context: Context) {
          * points rather than a character class holding brackets: ICU on device
          * read `[(...)]` as an unterminated class ("missing closing bracket").
          * No literal full-width bracket in the source, on purpose.
+         *
+         * The digit class spells out the full-width range as escapes too: Java's
+         * `\d` is ASCII-only (UNICODE_CHARACTER_CLASS is off), so "（１２）" never
+         * matched and a group title kept its member count while the same title
+         * typed half-width lost it — two keys for one group.
          */
-        private val TRAILING_COUNT =
-            safeRegex("\\s*(?:\\(|\\uFF08)\\s*\\d+\\s*(?:\\)|\\uFF09)\\s*$")
+        private val TRAILING_COUNT = safeRegex(
+            "\\s*(?:\\(|\\uFF08)\\s*[0-9\\uFF10-\\uFF19]+\\s*(?:\\)|\\uFF09)\\s*$")
 
         private fun stripZeroWidth(s: String): String = ZERO_WIDTH?.replace(s, "") ?: s
 
@@ -514,17 +556,21 @@ class KbStore private constructor(context: Context) {
             TRAILING_COUNT?.replace(s, "")?.trim() ?: s
 
         /**
-         * Name key for matching: trimmed, zero-width characters removed, the
+         * Name key for matching: NFKC-folded, zero-width characters removed, the
          * group member count `(12)` (half- or full-width) dropped, lower-cased.
+         *
+         * NFKC is what makes "Ａｌｉｃｅ" and "Alice" the same key — `lowercase()`
+         * alone leaves the full-width letters alone, so a title typed with an IME
+         * in full-width mode never matched the contact saved in half-width.
          * If the patterns failed to compile this degrades to trim + lowercase.
          */
         fun normalizeName(s: String?): String {
             if (s.isNullOrEmpty()) return ""
-            val t = stripTrailingCount(stripZeroWidth(s).trim())
+            val t = stripTrailingCount(stripZeroWidth(nfkc(s)).trim())
             return t.trim().lowercase()
         }
 
-        /** Same cleanup as [normalizeName] but keeps the original casing, for display. */
+        /** Same cleanup as [normalizeName] but keeps the original characters, for display. */
         fun displayName(s: String?): String {
             if (s.isNullOrEmpty()) return ""
             return stripTrailingCount(stripZeroWidth(s).trim()).trim()
@@ -533,7 +579,11 @@ class KbStore private constructor(context: Context) {
         /** Loose key for substring matching (no member-count stripping). */
         fun normalizeText(s: String?): String {
             if (s.isNullOrEmpty()) return ""
-            return stripZeroWidth(s).trim().lowercase()
+            return stripZeroWidth(nfkc(s)).trim().lowercase()
         }
+
+        /** Compatibility fold; identity when the platform refuses the form. */
+        private fun nfkc(s: String): String =
+            runCatching { Normalizer.normalize(s, Normalizer.Form.NFKC) }.getOrDefault(s)
     }
 }
