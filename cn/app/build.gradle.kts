@@ -24,9 +24,10 @@ android {
         minSdk = 30
         targetSdk = 35
         // 12: PR #68 整合（微信 / 抖音 / 多闪适配器 + DeepSeek 官方三路）。
+        // 13: 1.8.1 缺陷修复（OCR 重试、抖音填入、坐标失一等）。
         // 高于此前任何已发布构建，避免降级安装被系统拒绝。
-        versionCode = 12
-        versionName = "1.8"
+        versionCode = 13
+        versionName = "1.8.1"
 
         // ML Kit's bundled Chinese recognizer ships native libs for every ABI.
         // The target phone (and every phone this can run on: minSdk 30) is
