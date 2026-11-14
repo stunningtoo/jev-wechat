@@ -3,6 +3,7 @@ package com.jev.probe.capture
 import android.accessibilityservice.AccessibilityService
 import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
@@ -782,6 +783,15 @@ open class ChatCaptureService : AccessibilityService() {
                 is ScreenCapture.Result.Ok -> {
                     ocr.scaleX = res.scaleX; ocr.scaleY = res.scaleY
                     ocr.originX = res.originX; ocr.originY = res.originY
+                    // "0 lines recognized" has two very different causes: a black
+                    // frame (the system handed us an empty picture for a protected
+                    // window) or a readable frame the recognizer got nothing out
+                    // of. The mean brightness tells them apart without a logcat.
+                    val bright = brightnessOf(res.bitmap)
+                    note(
+                        if (bright < 8) "截图 ${res.bitmap.width}x${res.bitmap.height} 几乎全黑（亮度=$bright）—— 系统给的是空画面"
+                        else "截图 ${res.bitmap.width}x${res.bitmap.height} 亮度=$bright，开始识别"
+                    )
                     if (rects.isNotEmpty() && !manual) {
                         // Re-measure inside the callback. The rects handed in were
                         // read before the 120ms overlay-hide wait and the shot
@@ -925,6 +935,27 @@ open class ChatCaptureService : AccessibilityService() {
             overlay?.setNote(snapshot.note)
             overlay?.showIdle(snapshot.title)
         }
+    }
+
+    /** Mean luma of a coarse sample grid, 0..255. A black frame means the system
+     *  handed us an empty picture rather than a hard failure. */
+    private fun brightnessOf(bmp: Bitmap): Int {
+        val stepX = maxOf(bmp.width / 32, 1)
+        val stepY = maxOf(bmp.height / 48, 1)
+        var sum = 0L
+        var n = 0
+        var y = 0
+        while (y < bmp.height) {
+            var x = 0
+            while (x < bmp.width) {
+                val p = bmp.getPixel(x, y)
+                sum += (Color.red(p) + Color.green(p) + Color.blue(p)) / 3
+                n++
+                x += stepX
+            }
+            y += stepY
+        }
+        return if (n == 0) -1 else (sum / n).toInt()
     }
 
     /** WeChat's bottom tab bar, three or more of it in one screen. */
