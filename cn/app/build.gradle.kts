@@ -26,9 +26,10 @@ android {
         // 12: PR #68 整合（微信 / 抖音 / 多闪适配器 + DeepSeek 官方三路）。
         // 13: 1.8.1 缺陷修复（OCR 重试、抖音填入、坐标失一等）。
         // 14: 1.8.2 微信 8.0.80 适配（不再依赖气泡 id）+ 抓取诊断页。
+        // 15: 1.8.3 微信根节点无子节点时交截屏识别。
         // 高于此前任何已发布构建，避免降级安装被系统拒绝。
-        versionCode = 14
-        versionName = "1.8.2"
+        versionCode = 15
+        versionName = "1.8.3"
 
         // ML Kit's bundled Chinese recognizer ships native libs for every ABI.
         // The target phone (and every phone this can run on: minSdk 30) is

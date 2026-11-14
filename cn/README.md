@@ -4,7 +4,7 @@
 
 # Jev 聊天助手 · 国内版（Android）
 
-[← 返回总览](../.github/README.zh-CN.md) · [下载 v1.8.2 APK](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.2-release.apk) · [更新日志](CHANGELOG.md) · [隐私政策](PRIVACY.md)
+[← 返回总览](../.github/README.zh-CN.md) · [下载 v1.8.3 APK](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.3-release.apk) · [更新日志](CHANGELOG.md) · [隐私政策](PRIVACY.md)
 
 **简体中文** · [English](README.en.md) · [Tiếng Việt](README.vi.md)
 
@@ -47,10 +47,10 @@
 
 ## 快速开始
 
-**1. 装包。** 仓库里有签好名的 release 包：[下载 Jev Android v1.8.2 APK](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.2-release.apk)（Android 11+，仅支持 ARM64 / `arm64-v8a`）。[Releases](https://github.com/stunningtoo/jev-wechat/releases)可查看历史版本的发布说明。
+**1. 装包。** 仓库里有签好名的 release 包：[下载 Jev Android v1.8.3 APK](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.3-release.apk)（Android 11+，仅支持 ARM64 / `arm64-v8a`）。[Releases](https://github.com/stunningtoo/jev-wechat/releases)可查看历史版本的发布说明。
 
 ```bash
-adb install -r apk/jev-assistant-v1.8.2-release.apk
+adb install -r apk/jev-assistant-v1.8.3-release.apk
 ```
 
 **2. 填密钥。** 打开 App → 设置 →「接口」分三张卡：判断接口 / 回复接口 / 视觉接口。最简单只填「判断接口」一栏的 [OpenRouter](https://openrouter.ai/) API Key，其余两栏留空会自动继承这把密钥就能用。想换回复模型（默认 `deepseek/deepseek-chat-v3.1`，国内 Gemini / OpenAI 会被区域限制）就在「回复接口」选预设（OpenRouter / DeepSeek 官方 / 通义兼容）或自填地址，每张卡都有独立的一键连通测试。
