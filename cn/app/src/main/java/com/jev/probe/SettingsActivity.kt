@@ -366,6 +366,26 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         })
         card2.addView(text("只记录节点数量、坐标带和 OCR 条数，不含任何聊天内容。", 11f, sub))
+        card2.addView(cardBtn("诊断：上次崩溃") {
+            val crash = com.jev.probe.capture.ChatCaptureService.lastCrash(this)
+            if (crash.isNullOrBlank()) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("上次崩溃")
+                    .setMessage("没有记录。装好之后如果闪退过，这里会显示堆栈。")
+                    .setPositiveButton("好", null)
+                    .show()
+            } else {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("上次崩溃")
+                    .setMessage(crash)
+                    .setPositiveButton("清空") { _, _ ->
+                        com.jev.probe.capture.ChatCaptureService.clearLastCrash(this)
+                    }
+                    .setNegativeButton("关", null)
+                    .show()
+            }
+        })
+        card2.addView(text("闪退后重新打开 Jev，这里能读到完整的堆栈，用来定位崩在哪一步。", 11f, sub))
 
         // --- 知识库 / 关联上下文（D 阶段） ---
         val ctxRow = toggleRow("记录聊天历史（只存本机，用于关联上下文）", prefs.contextEnabled)

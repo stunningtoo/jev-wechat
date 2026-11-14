@@ -1,6 +1,7 @@
 package com.jev.probe.capture
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -23,6 +24,12 @@ import com.jev.probe.core.kb.ContextBuilder
 import com.jev.probe.core.kb.KbStore
 import com.jev.probe.jev.JevClient
 import com.jev.probe.overlay.OverlayController
+import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -46,6 +53,12 @@ import java.util.concurrent.TimeoutException
 open class ChatCaptureService : AccessibilityService() {
 
     private val main = Handler(Looper.getMainLooper())
+    /** When the oldest still-pending capture request arrived; 0 = nothing queued. */
+    private var captureFirstQueuedAt = 0L
+    private val captureRunnable = Runnable {
+        captureFirstQueuedAt = 0L
+        maybeCapture()
+    }
     private val worker = Executors.newFixedThreadPool(2)
 
     /** Judge/reply HTTP runs here under a hard watchdog (see [withHardTimeout]).
@@ -154,6 +167,8 @@ open class ChatCaptureService : AccessibilityService() {
     }
 
     private fun leaveConversation() {
+        main.removeCallbacks(captureRunnable)
+        captureFirstQueuedAt = 0L
         observeTarget(null)
         cancelAnalysis()
         currentSnapshot = null
@@ -259,6 +274,7 @@ open class ChatCaptureService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        installCrashRecorder(this)
         prefs = Prefs(this)
         getSharedPreferences(Prefs.PREFS_MAIN, MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(preferencesListener)
@@ -353,8 +369,27 @@ open class ChatCaptureService : AccessibilityService() {
         when (type) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_SCROLLED -> maybeCapture()
+            AccessibilityEvent.TYPE_VIEW_SCROLLED -> scheduleCapture()
         }
+    }
+
+    /**
+     * Coalesce capture requests. WeChat with a real node tree fires
+     * CONTENT_CHANGED dozens of times a second — caret blink, typing, an avatar
+     * loading, a status badge flipping — and every one of those used to run a
+     * full tree walk on the main thread. That is what made the bubble feel
+     * sluggish and dropped taps. Waiting for the event storm to pause costs a
+     * fraction of a second and does one walk instead of thirty.
+     */
+    private fun scheduleCapture() {
+        val now = SystemClock.elapsedRealtime()
+        if (captureFirstQueuedAt == 0L) captureFirstQueuedAt = now
+        main.removeCallbacks(captureRunnable)
+        // Pure debounce would starve: WeChat animates something (unread badge,
+        // caret, a typing indicator) and the next event lands inside the quiet
+        // window forever. Past the ceiling, stop waiting.
+        val delay = if (now - captureFirstQueuedAt >= CAPTURE_MAX_WAIT_MS) 0L else CAPTURE_DEBOUNCE_MS
+        main.postDelayed(captureRunnable, delay)
     }
 
     private fun maybeCapture() {
@@ -1090,6 +1125,55 @@ open class ChatCaptureService : AccessibilityService() {
             }
         }
 
+        private const val CRASH_FILE = "last-crash.txt"
+
+        /**
+         * Persist the last uncaught exception. A crash kills the process, so the
+         * in-memory [diag] ring goes with it — writing to external files keeps the
+         * stack readable afterwards (Settings → 诊断 reads it back).
+         */
+        fun installCrashRecorder(ctx: Context) {
+            if (crashInstalled) return
+            crashInstalled = true
+            val app = ctx.applicationContext
+            val prev = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { t, e ->
+                runCatching {
+                    val sw = StringWriter()
+                    e.printStackTrace(PrintWriter(sw))
+                    val body = buildString {
+                        append("time=")
+                        append(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()))
+                        append("\nthread=").append(t.name)
+                        append("\n").append(sw.toString())
+                    }
+                    val dir = app.getExternalFilesDir(null) ?: app.filesDir
+                    if (dir != null) {
+                        synchronized(crashLock) {
+                            File(dir, CRASH_FILE).writeText(body.take(12000))
+                        }
+                    }
+                }
+                prev?.uncaughtException(t, e)
+            }
+        }
+
+        fun lastCrash(ctx: Context): String? = runCatching {
+            val dir = ctx.applicationContext.getExternalFilesDir(null) ?: ctx.filesDir
+            val f = File(dir, CRASH_FILE)
+            if (f.isFile) f.readText() else null
+        }.getOrNull()
+
+        fun clearLastCrash(ctx: Context) {
+            runCatching {
+                val dir = ctx.applicationContext.getExternalFilesDir(null) ?: ctx.filesDir
+                File(dir, CRASH_FILE).delete()
+            }
+        }
+
+        @Volatile private var crashInstalled = false
+        private val crashLock = Any()
+
         /** Hard ceiling on one round's judge/reply HTTP. HttpURLConnection bounds
          *  connect/read per attempt but NOT DNS resolution, so a wedged lookup
          *  could hold a round's callback forever (panel stuck on 生成中, every
@@ -1131,6 +1215,10 @@ open class ChatCaptureService : AccessibilityService() {
          *  from the next. Kept above [ScreenCapture]'s own 1s throttle so this is
          *  the effective rate, not a no-op. */
         private const val OCR_RETRY_MS = 2500L
+
+        /** Quiet window before a burst of content-changed events becomes one walk. */
+        private const val CAPTURE_DEBOUNCE_MS = 180L
+        private const val CAPTURE_MAX_WAIT_MS = 700L
 
         /** Said on the panel whenever a snapshot came from flat-screen OCR. */
         private const val OCR_NOTE = "OCR 未分边，把全部消息当作对方所说"

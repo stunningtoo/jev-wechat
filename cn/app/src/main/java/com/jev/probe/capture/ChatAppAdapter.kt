@@ -263,15 +263,24 @@ class WeChatAdapter : ChatAppAdapter {
         val botLimit = (h * 0.87).toInt()
         val rows = ArrayList<Row>()
         val stack = ArrayDeque<AccessibilityNodeInfo>()
+        val r = Rect()
         stack.addLast(root)
         var guard = 0
         while (stack.isNotEmpty() && guard < 5000) {
             guard++
             val n = stack.removeLast()
             if (n.isEditable) continue
-            val r = Rect()
             n.getBoundsInScreen(r)
-            if (r.width() > 0 && r.height() > 0) {
+            val rw = r.width()
+            val rh = r.height()
+            // Prune whole subtrees that sit outside the message band. WeChat's
+            // tree nests a title bar, a right-hand action strip and an input
+            // toolbar with emoticon panels; walking into those costs an IPC
+            // round trip per node and none of them can hold a message row.
+            // Only pruned when the bounds are real — an unlaid-out container
+            // reports 0x0 and is still descended into.
+            if (rw > 0 && rh > 0 && (r.bottom <= topLimit || r.top >= botLimit)) continue
+            if (rw > 0 && rh > 0) {
                 val t = (n.text?.toString() ?: n.contentDescription?.toString())?.trim()
                 if (!t.isNullOrEmpty() && t.length <= 800 &&
                     r.top >= topLimit && r.bottom <= botLimit &&

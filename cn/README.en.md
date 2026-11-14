@@ -4,7 +4,7 @@
 
 # Jev Chat Assistant · Chinese Edition (Android)
 
-[← Back to overview](../.github/README.md) · [Download v1.8.6 APK](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.6-release.apk) · [Changelog](CHANGELOG.md) · [Privacy policy](PRIVACY.md)
+[← Back to overview](../.github/README.md) · [Download v1.8.7 APK](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.7-release.apk) · [Changelog](CHANGELOG.md) · [Privacy policy](PRIVACY.md)
 
 [简体中文](README.md) · **English** · [Tiếng Việt](README.vi.md)
 
@@ -46,10 +46,10 @@ Jev only reads conversations on your own device that you are authorized to view.
 
 ## Quick Start
 
-**1. Install the app.** A signed release APK is included in the repository: [`apk/jev-assistant-v1.8.6-release.apk`](apk/jev-assistant-v1.8.6-release.apk). Requires Android 11 or later and an ARM64 (`arm64-v8a`) device. Downloads for other versions are available under [Releases](https://github.com/stunningtoo/jev-wechat/releases).
+**1. Install the app.** A signed release APK is included in the repository: [`apk/jev-assistant-v1.8.7-release.apk`](apk/jev-assistant-v1.8.7-release.apk). Requires Android 11 or later and an ARM64 (`arm64-v8a`) device. Downloads for other versions are available under [Releases](https://github.com/stunningtoo/jev-wechat/releases).
 
 ```bash
-adb install -r apk/jev-assistant-v1.8.6-release.apk
+adb install -r apk/jev-assistant-v1.8.7-release.apk
 ```
 
 **2. Add your API key.** Open the app, go to Settings, and find the API section. It has three cards: Assessment API, Reply API, and Vision API. For the simplest setup, enter an [OpenRouter](https://openrouter.ai/) API key under Assessment API and leave the other two blank; they will inherit the same key. To change the reply model (the default is `deepseek/deepseek-chat-v3.1`; Gemini and OpenAI are subject to regional restrictions in mainland China), choose a preset under Reply API, such as OpenRouter, DeepSeek, or Tongyi-compatible, or enter a custom URL. Each card has its own connection test.

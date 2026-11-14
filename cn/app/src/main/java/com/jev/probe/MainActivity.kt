@@ -43,6 +43,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        // A crash in the activity happens before the service ever starts, so the
+        // recorder is installed here too — the handler is process-wide.
+        com.jev.probe.capture.ChatCaptureService.installCrashRecorder(this)
         window.decorView.setBackgroundColor(Color.parseColor("#F2F3F5"))
 
         val scroll = ScrollView(this)
