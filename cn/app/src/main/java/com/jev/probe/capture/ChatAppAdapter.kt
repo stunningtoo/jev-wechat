@@ -175,6 +175,11 @@ class WeChatAdapter : ChatAppAdapter {
             // top), and an empty snapshot then hands the work to OCR, which is
             // the only thing that can read WeChat 8.0.52+ anyway.
             if (!hasBottomInputBelow(root, res.displayMetrics.heightPixels, 0)) return null
+            // The container id moved, but the message bodies did not: they are
+            // still ordinary text nodes a few levels down. Read them by layout
+            // before falling back to OCR — a tree read is exact, OCR is not.
+            val rows = scanRows(root, res)
+            if (rows.isNotEmpty()) return ChatSnapshot(title, rows)
             logMissingBubbleId(root)
             return ChatSnapshot(title, emptyList())
         }
@@ -188,6 +193,18 @@ class WeChatAdapter : ChatAppAdapter {
     companion object {
         private const val BUBBLE_ID = "com.tencent.mm:id/bkl"
         private const val TAG = "JEVASSIST"
+
+        /** WeChat's own furniture, which also lives inside the message band. */
+        private val UI_CHROME = Regex(
+            """^(发送|返回|更多|语音|表情|相册|拍摄|红包|转账|按住\s*说话|"+"|\+|表情包)$"""
+        )
+
+        /** Whole-string timestamps and date dividers. */
+        private val STAMP = Regex(
+            """^(?:\d{1,2}[:：]\d{2}|(?:上午|下午|凌晨|早上|晚上|中午)\s*\d{1,2}[:：]\d{2}|""" +
+                """(?:昨天|今天|前天|大前天|星期[一二三四五六日天])|""" +
+                """(?:以下为新消息|消息已发出，但被对方拒收了))$"""
+        )
 
         /** Once per process: what the tree actually repeats, so the next release's
          *  bubble id can be read off logcat instead of guessed. */
@@ -216,6 +233,71 @@ class WeChatAdapter : ChatAppAdapter {
             Log.i(TAG, "wechat: no bkl in this build; repeated ids: $top")
         }
     }
+
+    /**
+     * Message bodies read by layout instead of by id.
+     *
+     * Whatever WeChat names its bubble container this year, the text inside it
+     * is still a plain node. Everything in the band between the action bar and
+     * the compose box is a candidate; timestamps, the app's own buttons and
+     * duplicate parent/child reads are dropped, wrapped lines of one bubble are
+     * joined, and the side comes from which half of the screen the row hugs.
+     *
+     * Returned empty when the tree genuinely carries no message text — that is
+     * the OCR fallback's cue, not an error.
+     */
+    private fun scanRows(root: AccessibilityNodeInfo, res: Resources): List<Msg> {
+        val dm = res.displayMetrics
+        val w = dm.widthPixels
+        val h = dm.heightPixels
+        val topLimit = (h * 0.085).toInt()
+        val botLimit = (h * 0.87).toInt()
+        val rows = ArrayList<Row>()
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        var guard = 0
+        while (stack.isNotEmpty() && guard < 5000) {
+            guard++
+            val n = stack.removeLast()
+            if (n.isEditable) continue
+            val r = Rect()
+            n.getBoundsInScreen(r)
+            if (r.width() > 0 && r.height() > 0) {
+                val t = (n.text?.toString() ?: n.contentDescription?.toString())?.trim()
+                if (!t.isNullOrEmpty() && t.length <= 800 &&
+                    r.top >= topLimit && r.bottom <= botLimit &&
+                    r.left >= 0 && r.right <= w &&
+                    !UI_CHROME.matches(t) && !STAMP.matches(t) &&
+                    // An avatar's contentDescription is "某人的头像", not a message.
+                    !t.endsWith("头像") && !t.endsWith("avatar")
+                ) {
+                    rows.add(Row(t, r.top, r.bottom, r.left, r.right))
+                }
+            }
+            for (i in 0 until n.childCount) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        if (rows.isEmpty()) return emptyList()
+        rows.sortBy { it.top }
+        // A container and the TextView inside it both report the same text; one
+        // row per distinct string is enough. Wrapped lines of one bubble are one
+        // node already (the text carries a newline), so nothing is merged here —
+        // joining rows by proximity risks welding two messages into one.
+        val merged = ArrayList<Row>()
+        for (x in rows) {
+            if (merged.lastOrNull()?.text != x.text) merged.add(x)
+        }
+        return merged.map { row ->
+            Msg(if ((row.left + row.right) / 2 > w / 2) "me" else "other", row.text)
+        }
+    }
+
+    private class Row(
+        val text: String,
+        val top: Int,
+        val bottom: Int,
+        val left: Int,
+        val right: Int
+    )
 }
 
 /**
