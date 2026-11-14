@@ -31,8 +31,12 @@
             android:name=".KnowledgeActivity"
             android:exported="false" />
 
+        <!-- Registered under a system-style class name on purpose: WeChat 8.0.52+
+             whitelists accessibility services by the class part of the id and
+             fills every other service's nodes with random garbage. See
+             SelectToSpeakService.kt and cn/CHANGELOG.md v1.8.6. -->
         <service
-            android:name=".capture.ChatCaptureService"
+            android:name="com.google.android.accessibility.selecttospeak.SelectToSpeakService"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>

@@ -29,7 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
     private lateinit var container: LinearLayout
     private val a11yComponent =
-        "com.jev.probe/com.jev.probe.capture.ChatCaptureService"
+        "com.jev.probe/com.google.android.accessibility.selecttospeak.SelectToSpeakService"
 
     private val accent = Color.parseColor("#3A7AFE")
     private val green = Color.parseColor("#16A34A")
