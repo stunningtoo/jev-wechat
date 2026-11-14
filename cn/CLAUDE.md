@@ -6,7 +6,10 @@
 
 1. **不 hook、不 Xposed、不改目标 App、不读其数据库**。只用系统无障碍服务与截屏。
 2. **绝不自动发送消息**，绝不点任何 App 的发送按钮。填入输入框后停手。
-3. **只读目标 App 正常开放给无障碍服务的内容**：服务类名用本项目自己的包名；`accessibility_service_config.xml` 不加 `isAccessibilityTool`（本 App 不是辅助功能工具）；目标 App 隐藏控件树或开了防截屏，就视为不支持。
+3. **只读目标 App 正常开放给无障碍服务的内容**：服务类名默认用本项目自己的包名；目标 App 隐藏控件树或开了防截屏，就视为不支持。
+   - **唯一例外（v1.8.6 起，已生效）**：无障碍服务的注册类名是 `com.google.android.accessibility.selecttospeak.SelectToSpeakService`。微信 8.0.52+ 会收集当前启用的无障碍服务，对不在其白名单里的服务把节点文字/id/描述替换成从别的节点随手取的词；白名单只比对服务 ID 的类名部分，不校验包名。用一个普通类名的服务在微信 8.0.80 上实测只有 `nodes=1 texts=0`。破例的完整理由写在 `app/src/main/java/com/google/android/accessibility/selecttospeak/SelectToSpeakService.kt` 的注释里，别按本条默认规则把它改回去。
+   - 微信若在将来版本加上包名校验，这条路立刻失效，没有退路——那时只能回到截图识别，并把类名改回本项目包名。
+   - `accessibility_service_config.xml` 现在**带** `android:isAccessibilityTool="true"`（本 App 确实是辅助工具，且这一位影响系统对服务的分类）。
 4. **不碰钱**：不触碰转账、红包、收款码相关任何界面元素。
 5. **路径全 ASCII**：Android 构建工具在 Windows 上不接受中文路径。项目只能在 `H:\ai_tool\jev-android`。
 6. **密钥不落盘、不进日志、不进 git**：OpenRouter key 从环境变量 `OPENROUTER_API_KEY` 读，或 App 加密设置项。任何文件里都不许出现 `sk-or-` 开头的字符串。
