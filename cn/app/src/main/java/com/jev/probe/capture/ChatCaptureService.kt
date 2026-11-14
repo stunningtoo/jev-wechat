@@ -175,11 +175,19 @@ open class ChatCaptureService : AccessibilityService() {
         // unbinding the session there killed in-flight analyses. Keep the
         // previously verified title instead.
         val fresh = snapshot.title?.takeUnless { isTransientTitle(it) }
+        // A missing title used to abort the whole target, which turned into
+        // "not in a chat window" → scheduleLeave → an idle bubble and nothing
+        // else. That is what WeChat looked like once its obfuscated ids moved:
+        // the adapter could prove it was in a conversation (compose box) but
+        // could not name it, and the service threw the reading away.
+        // The title is only a label and a whitelist key, both of which handle
+        // null (an empty whitelist allows everything), so keep the reading and
+        // let the previous known title carry over when there is one.
         val title = if (fresh != null) fresh
         else {
             val known = session.target
-            if (known != null && known.pkg == pkg && known.windowId == root.windowId &&
-                !known.title.isNullOrBlank()) known.title else return null
+            if (known != null && known.pkg == pkg && known.windowId == root.windowId) known.title
+            else null
         }
         return ConversationSession.Target(pkg, root.windowId, title, messagesSignature)
     }
@@ -834,6 +842,10 @@ open class ChatCaptureService : AccessibilityService() {
         // Counts only — OCR'd chat text never goes to logcat.
         Log.i(TAG, "ocr[$pkg] msgs=${snapshot.messages.size} manual=$manual")
         if (snapshot.messages.isEmpty()) {
+            // Say so on the bubble instead of staying mute: "no card appeared"
+            // is indistinguishable from "the app is broken", and this is the one
+            // case where the user can act (scroll, or turn OCR off).
+            overlay?.setNote("这一屏没认出文字")
             if (manual) overlay?.showError("这一屏没认出文字")
             return
         }

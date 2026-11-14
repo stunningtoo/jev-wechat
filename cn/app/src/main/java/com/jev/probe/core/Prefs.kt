@@ -171,9 +171,18 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         get() = sp.getBoolean(K_OCR_FALLBACK, true)
         set(v) = sp.edit().putBoolean(K_OCR_FALLBACK, v).apply()
 
-    /** Auto-analyze in OCR mode (default off: OCR costs a screenshot each time). */
+    /**
+     * Analyze an OCR reading without a tap.
+     *
+     * Default on. It was off to spare the screenshot, but the screenshot is
+     * already spent by the time this matters — [ocrFallback] decides whether to
+     * shoot at all, and this only decides whether the reading gets an answer.
+     * Off meant the OCR path silently stopped at an idle bubble, which is
+     * exactly what WeChat looked like: it can only be read by OCR, so the app
+     * answered with a bubble and no card, forever.
+     */
     var ocrAutoAnalyze: Boolean
-        get() = sp.getBoolean(K_OCR_AUTO, false)
+        get() = sp.getBoolean(K_OCR_AUTO, true)
         set(v) = sp.edit().putBoolean(K_OCR_AUTO, v).apply()
 
     // ------------------------------------------------------------- existing
