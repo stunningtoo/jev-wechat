@@ -351,6 +351,9 @@ class SettingsActivity : AppCompatActivity() {
         val ocrAutoRow = toggleRow("OCR 模式自动分析", prefs.ocrAutoAnalyze)
         card2.addView(ocrAutoRow)
         card2.addView(text("关闭时 OCR 认完只亮悬浮球，点一下再分析。", 11f, sub))
+        val ocrUnknownRow = toggleRow("未适配的 App 也走 OCR", prefs.ocrForUnknownApps)
+        card2.addView(ocrUnknownRow)
+        card2.addView(text("没有专门适配的聊天软件，通用识别在树里读不出正文时改用截屏识别（判定条件是屏幕下半部有输入框）。", 11f, sub))
 
         // --- 知识库 / 关联上下文（D 阶段） ---
         val ctxRow = toggleRow("记录聊天历史（只存本机，用于关联上下文）", prefs.contextEnabled)
@@ -461,6 +464,7 @@ class SettingsActivity : AppCompatActivity() {
             prefs.candidateCount = pickedCount
             prefs.ocrFallback = (ocrFallbackRow.tag as? Boolean) ?: true
             prefs.ocrAutoAnalyze = (ocrAutoRow.tag as? Boolean) ?: false
+            prefs.ocrForUnknownApps = (ocrUnknownRow.tag as? Boolean) ?: true
             prefs.contextEnabled = (ctxRow.tag as? Boolean) ?: false
             prefs.contextHistoryCount =
                 ctxCountEdit.text.toString().trim().toIntOrNull()?.coerceIn(0, 100) ?: 30

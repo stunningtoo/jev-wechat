@@ -167,7 +167,7 @@ open class ChatCaptureService : AccessibilityService() {
         // dropped, so WeChat / Soul / any left-right bubble app is read without a
         // dedicated adapter. A dedicated one still wins when it exists.
         val adapter = adapters[pkg] ?: genericAdapter
-        val snapshot = adapter.extract(root, resources) ?: return null
+        val snapshot = readSnapshot(root, pkg, adapter) ?: return null
         val messagesSignature = snapshot.takeIf { it.messages.isNotEmpty() }?.signature()
         // A loading/unknown title cannot prove which conversation is open —
         // unless the SAME app+window already has a known one: animated
@@ -366,7 +366,7 @@ open class ChatCaptureService : AccessibilityService() {
         // app must behave at least as well as an unadapted one, which parks an idle
         // bubble so the menu stays reachable. Without this, opening QQ / Feishu on
         // their list screen produced no bubble at all.
-        val rawSnapshot = adapter.extract(root, resources)
+        val rawSnapshot = readSnapshot(root, pkg, adapter)
         if (rawSnapshot == null) { scheduleLeave(); return }
         val target = targetFor(root)
         if (target == null) { scheduleLeave(); return }
@@ -466,8 +466,9 @@ open class ChatCaptureService : AccessibilityService() {
         // Same fallback as maybeCapture: an app without a dedicated adapter can
         // still be in a chat window, so "no adapter" must not mean "left".
         val gone = if (root == null) true else {
-            val adapter = root.packageName?.toString()?.let { adapters[it] } ?: genericAdapter
-            adapter.extract(root, resources) == null || targetFor(root) == null
+            val pkg = root.packageName?.toString()
+            val adapter = pkg?.let { adapters[it] } ?: genericAdapter
+            readSnapshot(root, pkg, adapter) == null || targetFor(root) == null
         }
         if (gone) { leaveConversation(); overlay?.showIdle(null) }
     }
@@ -476,6 +477,36 @@ open class ChatCaptureService : AccessibilityService() {
         if (session.target == null) { leaveConversation(); overlay?.showIdle(null); return }
         main.removeCallbacks(confirmLeave)
         main.postDelayed(confirmLeave, LEAVE_CONFIRM_MS)
+    }
+
+    /**
+     * Read one window through its adapter, with the app-agnostic OCR cue attached.
+     *
+     * Apps without a dedicated adapter go through [genericAdapter], whose null
+     * answers "not a chat window" on a pile of geometry tests (two rows, narrow
+     * bubbles, a title). Those tests read the node tree, so an app that hides its
+     * bodies — or one whose rows the geometric pass cannot line up — came back
+     * null and the service went silent, exactly like a list screen. That is what
+     * [Prefs.ocrForUnknownApps] is for: when the tree yields nothing but the
+     * screen still looks like a conversation (a compose box in the lower half),
+     * report an empty snapshot so the OCR fallback gets a chance.
+     *
+     * Deliberately narrow: dedicated adapters are untouched, and without a
+     * lower-half input field this still returns null (a feed, a settings page, a
+     * browser toolbar all stay silent).
+     */
+    private fun readSnapshot(
+        root: AccessibilityNodeInfo,
+        pkg: String?,
+        adapter: ChatAppAdapter
+    ): ChatSnapshot? {
+        val direct = adapter.extract(root, resources)
+        if (direct != null) return direct
+        if (adapter !== genericAdapter) return null
+        if (!prefs.ocrForUnknownApps || pkg == null || isBlocked(pkg)) return null
+        val dm = resources.displayMetrics
+        if (!hasBottomInputBelow(root, dm.heightPixels, 0)) return null
+        return ChatSnapshot(findTitleInActionBar(root, Int.MAX_VALUE, dm.widthPixels, resources), emptyList())
     }
 
     /** "换一组" / 重试: redraft the candidates only; the judgment on the card stays. */
