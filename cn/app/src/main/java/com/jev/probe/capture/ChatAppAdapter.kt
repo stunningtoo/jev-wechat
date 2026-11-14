@@ -135,7 +135,7 @@ internal fun findWeChatTitle(
  *  node text from ordinary services, so an empty read here (a `bkl` with no
  *  text) is exactly the case OCR fallback exists for. */
 class WeChatAdapter : ChatAppAdapter {
-    override val pkg = "com.tencent.mm"
+    override val pkg = PKG
 
     override fun extract(root: AccessibilityNodeInfo, res: Resources): ChatSnapshot? {
         val width = res.displayMetrics.widthPixels
@@ -162,6 +162,14 @@ class WeChatAdapter : ChatAppAdapter {
             for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
         }
         val title = findWeChatTitle(root, firstBubbleTop, width, res)
+        // WeChat 8.0.80 hands a non-system accessibility service a root with no
+        // children at all: one node, no ids, no text, no compose box. Measured on
+        // device — `nodes=1 ids=0 texts=0 底部输入框=false`. Nothing in that tree
+        // can tell a conversation from the chat list, and every id-based guess
+        // below is dead, so the only channel left is the screenshot.
+        if (root.childCount == 0) {
+            return ChatSnapshot(title, emptyList(), emptyList(), "微信无障碍树是空的，只能截屏识别")
+        }
         // In a chat but nothing readable → empty snapshot, the OCR fallback cue.
         if (bubbles.isEmpty()) {
             if (isChat) return ChatSnapshot(title, emptyList())
@@ -191,6 +199,7 @@ class WeChatAdapter : ChatAppAdapter {
     }
 
     companion object {
+        const val PKG = "com.tencent.mm"
         private const val BUBBLE_ID = "com.tencent.mm:id/bkl"
         private const val TAG = "JEVASSIST"
 

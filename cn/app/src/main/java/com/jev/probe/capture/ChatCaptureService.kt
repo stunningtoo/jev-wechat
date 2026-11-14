@@ -890,6 +890,15 @@ open class ChatCaptureService : AccessibilityService() {
             if (manual) overlay?.showError("这一屏没认出文字")
             return
         }
+        // WeChat with an empty tree gets OCR'd on every screen, list included.
+        // Its tab bar is four fixed labels that are always on screen together,
+        // and a conversation never shows three of them as standalone lines —
+        // so this is a cheap way to skip analyzing the chat list.
+        if (pkg == WeChatAdapter.PKG && looksLikeWeChatList(snapshot.messages)) {
+            note("OCR[$pkg]: 像是会话列表，跳过")
+            if (manual) overlay?.showError("这是会话列表，点进一个聊天再看")
+            return
+        }
         if (!prefs.isAllowed(snapshot.title)) { leaveConversation(); overlay?.hide(); return }
 
         if (pkg.isNotEmpty() && pkg != activePkg) { activePkg = pkg; lastSignature = "" }
@@ -916,6 +925,12 @@ open class ChatCaptureService : AccessibilityService() {
             overlay?.setNote(snapshot.note)
             overlay?.showIdle(snapshot.title)
         }
+    }
+
+    /** WeChat's bottom tab bar, three or more of it in one screen. */
+    private fun looksLikeWeChatList(messages: List<Msg>): Boolean {
+        val tabs = setOf("微信", "通讯录", "发现", "我")
+        return messages.count { it.text.trim() in tabs } >= 3
     }
 
     /** Resolve only the originating chat's input, never an arbitrary foreground editor. */
