@@ -354,6 +354,18 @@ class SettingsActivity : AppCompatActivity() {
         val ocrUnknownRow = toggleRow("未适配的 App 也走 OCR", prefs.ocrForUnknownApps)
         card2.addView(ocrUnknownRow)
         card2.addView(text("没有专门适配的聊天软件，通用识别在树里读不出正文时改用截屏识别（判定条件是屏幕下半部有输入框）。", 11f, sub))
+        card2.addView(cardBtn("诊断：最近抓取记录") {
+            val lines = com.jev.probe.capture.ChatCaptureService.diagnostics()
+            val body = if (lines.isEmpty()) {
+                "还没有记录。\n\n打开一个聊天窗口、来回切一次，再回来看这里。"
+            } else lines.joinToString("\n")
+            android.app.AlertDialog.Builder(this)
+                .setTitle("最近抓取记录")
+                .setMessage(body)
+                .setPositiveButton("好", null)
+                .show()
+        })
+        card2.addView(text("只记录节点数量、坐标带和 OCR 条数，不含任何聊天内容。", 11f, sub))
 
         // --- 知识库 / 关联上下文（D 阶段） ---
         val ctxRow = toggleRow("记录聊天历史（只存本机，用于关联上下文）", prefs.contextEnabled)

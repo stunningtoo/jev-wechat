@@ -509,12 +509,51 @@ open class ChatCaptureService : AccessibilityService() {
         adapter: ChatAppAdapter
     ): ChatSnapshot? {
         val direct = adapter.extract(root, resources)
-        if (direct != null) return direct
+        if (direct != null) {
+            if (direct.messages.isEmpty()) {
+                note("${pkg ?: "?"}: 树读空（${adapter.javaClass.simpleName}）→ OCR 兜底")
+            }
+            return direct
+        }
+        // Nothing readable. Record what the tree actually offered before giving
+        // up: "no text at all" (the app hides its bodies) and "text present but
+        // the adapter rejected it" (a bug here) look identical from the outside,
+        // and they need opposite fixes.
+        note("${pkg ?: "?"}: ${adapter.javaClass.simpleName} 判空 → ${treeStats(root)}")
         if (adapter !== genericAdapter) return null
         if (!prefs.ocrForUnknownApps || pkg == null || isBlocked(pkg)) return null
         val dm = resources.displayMetrics
         if (!hasBottomInputBelow(root, dm.heightPixels, 0)) return null
         return ChatSnapshot(findTitleInActionBar(root, Int.MAX_VALUE, dm.widthPixels, resources), emptyList())
+    }
+
+    /** Shape of the tree, counts only — used to tell a hidden body from a
+     *  rejected one. Message text is never part of this. */
+    private fun treeStats(root: AccessibilityNodeInfo): String {
+        val h = resources.displayMetrics.heightPixels
+        val topLimit = (h * 0.085).toInt()
+        val botLimit = (h * 0.87).toInt()
+        var nodes = 0
+        var texts = 0
+        var inBand = 0
+        var ids = 0
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        while (stack.isNotEmpty() && nodes < 4000) {
+            nodes++
+            val n = stack.removeLast()
+            if (!n.viewIdResourceName.isNullOrEmpty()) ids++
+            val t = (n.text?.toString() ?: n.contentDescription?.toString())?.trim()
+            if (!t.isNullOrEmpty()) {
+                texts++
+                val r = Rect()
+                n.getBoundsInScreen(r)
+                if (r.top >= topLimit && r.bottom <= botLimit) inBand++
+            }
+            for (i in 0 until n.childCount) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        val input = hasBottomInputBelow(root, h, 0)
+        return "nodes=$nodes ids=$ids texts=$texts inBand=$inBand 底部输入框=$input"
     }
 
     /** "换一组" / 重试: redraft the candidates only; the judgment on the card stays. */
@@ -730,6 +769,7 @@ open class ChatCaptureService : AccessibilityService() {
                 is ScreenCapture.Result.Failed -> {
                     ocrBusy = false
                     Log.i(TAG, "ocr: screenshot failed code=${res.code}")
+                    note("截图失败: code=${res.code} ${res.humanMessage}")
                     // Nothing was read, so the signature must not claim this
                     // screen is done — the next event may retry, still held
                     // back by ScreenCapture's own throttle and failure backoff.
@@ -841,6 +881,7 @@ open class ChatCaptureService : AccessibilityService() {
         if (!isCurrent(token)) return
         // Counts only — OCR'd chat text never goes to logcat.
         Log.i(TAG, "ocr[$pkg] msgs=${snapshot.messages.size} manual=$manual")
+        note("OCR[$pkg]: 认出 ${snapshot.messages.size} 条")
         if (snapshot.messages.isEmpty()) {
             // Say so on the bubble instead of staying mute: "no card appeared"
             // is indistinguishable from "the app is broken", and this is the one
@@ -986,6 +1027,22 @@ open class ChatCaptureService : AccessibilityService() {
 
     companion object {
         private const val TAG = "JEVASSIST"
+
+        /**
+         * Last capture attempts, newest last, for the settings screen's
+         * diagnostic card. Counts and geometry only — never a message text.
+         * Bounded so a long service lifetime cannot grow it.
+         */
+        private val diag = ArrayDeque<String>()
+
+        fun diagnostics(): List<String> = synchronized(diag) { diag.toList() }
+
+        private fun note(line: String) {
+            synchronized(diag) {
+                diag.addLast(line)
+                while (diag.size > 30) diag.removeFirst()
+            }
+        }
 
         /** Hard ceiling on one round's judge/reply HTTP. HttpURLConnection bounds
          *  connect/read per attempt but NOT DNS resolution, so a wedged lookup
