@@ -4,7 +4,7 @@
 
 # Jev 聊天助手 · Bản tiếng Trung (Android)
 
-[← Quay lại trang tổng quan](../.github/README.vi.md) · [Tải APK v1.8.4](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.4-release.apk) · [Nhật ký thay đổi](CHANGELOG.md) · [Chính sách quyền riêng tư](PRIVACY.md)
+[← Quay lại trang tổng quan](../.github/README.vi.md) · [Tải APK v1.8.5](https://raw.githubusercontent.com/stunningtoo/jev-wechat/main/cn/apk/jev-assistant-v1.8.5-release.apk) · [Nhật ký thay đổi](CHANGELOG.md) · [Chính sách quyền riêng tư](PRIVACY.md)
 
 [简体中文](README.md) · [English](README.en.md) · **Tiếng Việt**
 
@@ -46,10 +46,10 @@ Dự án này chỉ đọc nội dung chat trên thiết bị của chính bạn
 
 ## Bắt đầu nhanh
 
-**1. Cài đặt.** Kho lưu trữ có gói release đã ký: [`apk/jev-assistant-v1.8.4-release.apk`](apk/jev-assistant-v1.8.4-release.apk) (Android 11+, chỉ hỗ trợ ARM64 / `arm64-v8a`). Gói cài đặt của các phiên bản khác cũng có trong [Releases](https://github.com/stunningtoo/jev-wechat/releases).
+**1. Cài đặt.** Kho lưu trữ có gói release đã ký: [`apk/jev-assistant-v1.8.5-release.apk`](apk/jev-assistant-v1.8.5-release.apk) (Android 11+, chỉ hỗ trợ ARM64 / `arm64-v8a`). Gói cài đặt của các phiên bản khác cũng có trong [Releases](https://github.com/stunningtoo/jev-wechat/releases).
 
 ```bash
-adb install -r apk/jev-assistant-v1.8.4-release.apk
+adb install -r apk/jev-assistant-v1.8.5-release.apk
 ```
 
 **2. Nhập khóa.** Mở ứng dụng → Cài đặt → “API”, chia thành ba thẻ: API phân tích / API trả lời / API thị giác. Cách đơn giản nhất là chỉ điền [API Key của OpenRouter](https://openrouter.ai/) vào thẻ “API phân tích”; để trống hai thẻ còn lại để chúng tự động kế thừa khóa này và ứng dụng sẽ dùng được. Nếu muốn đổi mô hình trả lời (mặc định `deepseek/deepseek-chat-v3.1`; Gemini / OpenAI tại Trung Quốc sẽ bị giới hạn theo khu vực), hãy chọn một cấu hình có sẵn trong “API trả lời” (OpenRouter / DeepSeek chính thức / 通义兼容) hoặc tự nhập địa chỉ; mỗi thẻ có chức năng kiểm tra kết nối độc lập bằng một chạm.

@@ -28,9 +28,10 @@ android {
         // 14: 1.8.2 微信 8.0.80 适配（不再依赖气泡 id）+ 抓取诊断页。
         // 15: 1.8.3 微信根节点无子节点时交截屏识别。
         // 16: 1.8.4 窗口截图被拒时改拍整屏。
+        // 17: 1.8.5 截图亮度进诊断。
         // 高于此前任何已发布构建，避免降级安装被系统拒绝。
-        versionCode = 16
-        versionName = "1.8.4"
+        versionCode = 17
+        versionName = "1.8.5"
 
         // ML Kit's bundled Chinese recognizer ships native libs for every ABI.
         // The target phone (and every phone this can run on: minSdk 30) is
