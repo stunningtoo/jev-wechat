@@ -195,18 +195,8 @@ class GenericAdapter : ChatAppAdapter {
     }
 
     /** The compose box must be in the lower half: chat apps put it at the bottom, search fields at the top. */
-    private fun hasBottomInput(node: AccessibilityNodeInfo?, h: Int, depth: Int): Boolean {
-        if (node == null || depth > 45) return false
-        if (node.isEditable) {
-            val r = Rect()
-            node.getBoundsInScreen(r)
-            if (r.centerY() > h * 0.55f) return true
-        }
-        for (i in 0 until node.childCount) {
-            if (hasBottomInput(node.getChild(i), h, depth + 1)) return true
-        }
-        return false
-    }
+    private fun hasBottomInput(node: AccessibilityNodeInfo?, h: Int, depth: Int): Boolean =
+        hasBottomInputBelow(node, h, depth)
 
     private fun walk(
         node: AccessibilityNodeInfo?,
@@ -246,4 +236,25 @@ class GenericAdapter : ChatAppAdapter {
 
         private val AVATAR_DESC = Regex("""^(头像|.*的头像|Avatar|.*'s avatar)$""", RegexOption.IGNORE_CASE)
     }
+}
+
+/**
+ * Is there an editable field in the lower half of the screen?
+ *
+ * Chat apps put the compose box at the bottom and a search field at the top, so
+ * this is the cheapest app-agnostic way to answer "is this the conversation
+ * screen?" without knowing a single control id. Shared with [WeChatAdapter],
+ * which needs it as a second opinion once WeChat's obfuscated ids move.
+ */
+internal fun hasBottomInputBelow(node: AccessibilityNodeInfo?, h: Int, depth: Int): Boolean {
+    if (node == null || depth > 45) return false
+    if (node.isEditable) {
+        val r = Rect()
+        node.getBoundsInScreen(r)
+        if (r.centerY() > h * 0.55f) return true
+    }
+    for (i in 0 until node.childCount) {
+        if (hasBottomInputBelow(node.getChild(i), h, depth + 1)) return true
+    }
+    return false
 }

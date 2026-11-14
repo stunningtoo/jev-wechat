@@ -2,6 +2,7 @@ package com.jev.probe.capture
 
 import android.content.res.Resources
 import android.graphics.Rect
+import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.jev.probe.core.BubbleRect
 import com.jev.probe.core.ChatSnapshot
@@ -162,7 +163,21 @@ class WeChatAdapter : ChatAppAdapter {
         }
         val title = findWeChatTitle(root, firstBubbleTop, width, res)
         // In a chat but nothing readable → empty snapshot, the OCR fallback cue.
-        if (bubbles.isEmpty()) return if (isChat) ChatSnapshot(title, emptyList()) else null
+        if (bubbles.isEmpty()) {
+            if (isChat) return ChatSnapshot(title, emptyList())
+            // No `id/bkl` anywhere. WeChat rotates its obfuscated ids between
+            // releases (bkl is not in 8.0.80), and when the marker is gone this
+            // adapter used to return null for every screen — which the service
+            // reads as "not in a chat window" and answers with silence. Nothing
+            // on screen at all, not even the idle bubble. So: second opinion
+            // that does not name a single id. A compose box in the lower half
+            // means a conversation (the list screen's search field sits at the
+            // top), and an empty snapshot then hands the work to OCR, which is
+            // the only thing that can read WeChat 8.0.52+ anyway.
+            if (!hasBottomInputBelow(root, res.displayMetrics.heightPixels, 0)) return null
+            logMissingBubbleId(root)
+            return ChatSnapshot(title, emptyList())
+        }
         bubbles.sortBy { it.first }
         val msgs = bubbles.map { (_, cx, text) ->
             Msg(if (cx > width / 2) "me" else "other", text)
@@ -172,6 +187,34 @@ class WeChatAdapter : ChatAppAdapter {
 
     companion object {
         private const val BUBBLE_ID = "com.tencent.mm:id/bkl"
+        private const val TAG = "JEVASSIST"
+
+        /** Once per process: what the tree actually repeats, so the next release's
+         *  bubble id can be read off logcat instead of guessed. */
+        @Volatile
+        private var shapeLogged = false
+
+        private fun logMissingBubbleId(root: AccessibilityNodeInfo) {
+            if (shapeLogged) return
+            shapeLogged = true
+            val counts = HashMap<String, Int>()
+            val stack = ArrayDeque<AccessibilityNodeInfo>()
+            stack.addLast(root)
+            var guard = 0
+            while (stack.isNotEmpty() && guard < 3000) {
+                guard++
+                val n = stack.removeLast()
+                val id = n.viewIdResourceName
+                if (!id.isNullOrEmpty()) {
+                    val short = id.substringAfter(":id/", id)
+                    counts[short] = (counts[short] ?: 0) + 1
+                }
+                for (i in 0 until n.childCount) n.getChild(i)?.let { stack.addLast(it) }
+            }
+            val top = counts.entries.sortedByDescending { it.value }.take(12)
+                .joinToString(", ") { "${it.key}x${it.value}" }
+            Log.i(TAG, "wechat: no bkl in this build; repeated ids: $top")
+        }
     }
 }
 
