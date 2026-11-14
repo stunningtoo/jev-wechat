@@ -102,33 +102,6 @@ class ScreenCapture(
     }
 
     private fun shoot(finish: (Result) -> Unit, done: AtomicBoolean) {
-        // Off-main on purpose: onSuccess copies the HardwareBuffer into a
-        // software bitmap, which froze the UI thread for seconds on some vivo
-        // builds (upstream #18). [finish] posts the outcome back to the main
-        // thread, so the "answers on the main thread" contract still holds.
-        val exec = shotExecutor
-        // Which area the picture will cover. Set just before the window shot is
-        // issued and read inside the callback, so the mapping always matches the
-        // call that actually produced the bitmap.
-        var windowBounds: Rect? = null
-        // The system can simply never call back (seen when a shot lands on a
-        // protected window during a transition). Without this the overlay stays
-        // INVISIBLE and the caller's busy flag is stuck until the service dies.
-        val timeout = Runnable { finish(Result.Failed(CODE_TIMEOUT, humanMessage(CODE_TIMEOUT))) }
-        val cb = object : AccessibilityService.TakeScreenshotCallback {
-            override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
-                main.removeCallbacks(timeout)
-                // Already timed out: this result is void. Drop the buffer (never
-                // leak it) and do not touch the caller a second time.
-                if (done.get()) { runCatching { result.hardwareBuffer.close() }; return }
-                finish(toBitmap(result, windowBounds))
-            }
-            override fun onFailure(errorCode: Int) {
-                main.removeCallbacks(timeout)
-                finish(Result.Failed(errorCode, humanMessage(errorCode)))
-            }
-        }
-
         // API 34+: shooting just the active window is cheaper and is allowed on
         // some OEM builds that refuse a whole-display capture. Fall back to the
         // display shot when the window id is unknown or the call is unavailable.
@@ -136,7 +109,7 @@ class ScreenCapture(
             val node = runCatching { service.rootInActiveWindow }.getOrNull()
             val windowId = node?.windowId
             if (windowId != null && windowId != -1) {
-                windowBounds = runCatching {
+                val bounds = runCatching {
                     val r = Rect()
                     node.window?.getBoundsInScreen(r)
                     r
@@ -150,25 +123,76 @@ class ScreenCapture(
                 // scale wrong by window/display height, which lands the OCR
                 // crops on the wrong lines. Fall through to the display shot
                 // instead, which needs no rect.
-                if (windowBounds != null) {
-                    try {
-                        service.takeScreenshotOfWindow(windowId, exec, cb)
-                        main.postDelayed(timeout, TIMEOUT_MS)
-                        return
-                    } catch (e: Throwable) {
-                        windowBounds = null
-                        Log.w(TAG, "takeScreenshotOfWindow unavailable: ${e.javaClass.simpleName}")
-                    }
-                } else {
-                    Log.w(TAG, "window bounds unavailable; using the display shot")
+                if (bounds != null) {
+                    shootWindow(bounds, windowId, finish, done)
+                    return
                 }
+                Log.w(TAG, "window bounds unavailable; using the display shot")
+            }
+        }
+        shootDisplay(finish, done)
+    }
+
+    /** Whole-display shot. No window rect, so coordinates map 1:1 from (0,0). */
+    private fun shootDisplay(finish: (Result) -> Unit, done: AtomicBoolean) {
+        val timeout = Runnable { finish(Result.Failed(CODE_TIMEOUT, humanMessage(CODE_TIMEOUT))) }
+        val cb = object : AccessibilityService.TakeScreenshotCallback {
+            override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                main.removeCallbacks(timeout)
+                if (done.get()) { runCatching { result.hardwareBuffer.close() }; return }
+                finish(toBitmap(result, null))
+            }
+            override fun onFailure(errorCode: Int) {
+                main.removeCallbacks(timeout)
+                finish(Result.Failed(errorCode, humanMessage(errorCode)))
             }
         }
         try {
-            service.takeScreenshot(Display.DEFAULT_DISPLAY, exec, cb)
+            service.takeScreenshot(Display.DEFAULT_DISPLAY, shotExecutor, cb)
             main.postDelayed(timeout, TIMEOUT_MS)
         } catch (e: Throwable) {
             finish(Result.Failed(CODE_INTERNAL, "截屏失败：${e.javaClass.simpleName}"))
+        }
+    }
+
+    /**
+     * Shot of one window, mapped through [bounds].
+     *
+     * A window shot can be refused while the display shot still works: WeChat on
+     * API 34+ answers `ERROR_TAKE_SCREENSHOT_INVALID_WINDOW` because the window
+     * it reports is not one the system will hand over, and the same screen
+     * captures fine through the display path. So a refusal of either kind that
+     * is about the *window* retries once as a display shot instead of failing.
+     */
+    private fun shootWindow(
+        bounds: Rect,
+        windowId: Int,
+        finish: (Result) -> Unit,
+        done: AtomicBoolean
+    ) {
+        val timeout = Runnable { finish(Result.Failed(CODE_TIMEOUT, humanMessage(CODE_TIMEOUT))) }
+        val cb = object : AccessibilityService.TakeScreenshotCallback {
+            override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                main.removeCallbacks(timeout)
+                if (done.get()) { runCatching { result.hardwareBuffer.close() }; return }
+                finish(toBitmap(result, bounds))
+            }
+            override fun onFailure(errorCode: Int) {
+                main.removeCallbacks(timeout)
+                if (!done.get() && (errorCode == ERROR_SECURE_WINDOW || errorCode == ERROR_INVALID_WINDOW)) {
+                    Log.w(TAG, "window shot refused ($errorCode); retrying the display shot")
+                    shootDisplay(finish, done)
+                    return
+                }
+                finish(Result.Failed(errorCode, humanMessage(errorCode)))
+            }
+        }
+        try {
+            service.takeScreenshotOfWindow(windowId, shotExecutor, cb)
+            main.postDelayed(timeout, TIMEOUT_MS)
+        } catch (e: Throwable) {
+            Log.w(TAG, "takeScreenshotOfWindow unavailable: ${e.javaClass.simpleName}")
+            shootDisplay(finish, done)
         }
     }
 
@@ -211,6 +235,11 @@ class ScreenCapture(
         const val CODE_CANCELLED = -3
         private const val CODE_INTERNAL = 1
 
+        /** AccessibilityService.ERROR_TAKE_SCREENSHOT_SECURE_WINDOW. */
+        private const val ERROR_SECURE_WINDOW = 5
+        /** AccessibilityService.ERROR_TAKE_SCREENSHOT_INVALID_WINDOW. */
+        private const val ERROR_INVALID_WINDOW = 6
+
         private const val MIN_INTERVAL_MS = 1000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_STREAK = 6
@@ -247,7 +276,8 @@ class ScreenCapture(
             2 -> "截屏失败：无障碍服务未声明截屏能力（去设置里把无障碍关掉再开启）"
             3 -> "截屏失败：间隔太短，等一秒再试"
             4 -> "截屏失败：没有有效的显示"
-            6 -> "截屏失败：窗口不可见或受保护（FLAG_SECURE），这类界面拿不到画面"
+            5 -> "截屏失败：这个窗口受保护（FLAG_SECURE），拿不到画面"
+            6 -> "截屏失败：窗口不可见或已失效"
             else -> "截屏失败（码 ${code}）"
         }
     }
